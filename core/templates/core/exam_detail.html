@@ -1,0 +1,187 @@
+{% extends "core/base.html" %}
+{% load blood_extras %}
+
+{% block title %}Exame {{ exam.exam_date|date:"d/m/Y" }} - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="{% url 'exam_history' %}" class="back-link">&larr; Voltar ao Histórico</a>
+        <h1>Exame de {{ exam.exam_date|date:"d/m/Y" }}</h1>
+        <p class="page-subtitle">
+            {{ exam.lab_name|default:"Laboratório não informado" }}
+            &bull; {{ exam.result_count }} biomarcadores
+            &bull; <span class="badge badge-{{ exam.status }}">{{ exam.get_status_display }}</span>
+        </p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'exam_reprocess' exam.id %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" onclick="return confirm('Reprocessar este exame com IA?')">
+                Reprocessar
+            </button>
+        </form>
+        <form method="post" action="{% url 'exam_delete' exam.id %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Tem certeza que deseja excluir este exame?')">
+                Excluir
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if exam.status == 'error' %}
+<div class="alert alert-error">
+    <strong>Erro no processamento:</strong> {{ exam.error_message }}
+</div>
+{% endif %}
+
+{% if analysis %}
+<!-- AI Analysis Section -->
+<div class="section ai-analysis">
+    <h2 class="section-title">Análise da IA</h2>
+
+    <div class="analysis-summary">
+        <p>{{ analysis.summary }}</p>
+    </div>
+
+    {% if analysis.alerts %}
+    <div class="analysis-alerts">
+        <h3>Alertas</h3>
+        {% for alert in analysis.alerts %}
+        <div class="alert-item">
+            <span class="alert-status alert-{{ alert.status }}">
+                {% if alert.status == "alto" %}⬆{% else %}⬇{% endif %}
+            </span>
+            <div>
+                <strong>{{ alert.biomarker }}</strong>: {{ alert.value }}
+                <p class="alert-message">{{ alert.message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if analysis.improvements %}
+    <div class="analysis-changes">
+        <h3>Melhorias</h3>
+        {% for item in analysis.improvements %}
+        <div class="change-item improvement">
+            <span class="change-icon">✅</span>
+            <div>
+                <strong>{{ item.biomarker }}</strong>: {{ item.previous }} &rarr; {{ item.current }}
+                <p>{{ item.message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if analysis.deteriorations %}
+    <div class="analysis-changes">
+        <h3>Pontos de Atenção</h3>
+        {% for item in analysis.deteriorations %}
+        <div class="change-item deterioration">
+            <span class="change-icon">⚠️</span>
+            <div>
+                <strong>{{ item.biomarker }}</strong>: {{ item.previous }} &rarr; {{ item.current }}
+                <p>{{ item.message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="analysis-recommendations">
+        <h3>Recomendações</h3>
+        <p>{{ analysis.recommendations|linebreaksbr }}</p>
+    </div>
+
+    {% if analysis.comparison_text %}
+    <div class="analysis-comparison">
+        <h3>Comparação Histórica</h3>
+        <p>{{ analysis.comparison_text|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Results Table -->
+<div class="section">
+    <h2 class="section-title">Resultados</h2>
+
+    {% for category, results in grouped_results.items %}
+    <div class="results-category">
+        <h3 class="category-title">{{ category }}</h3>
+        <div class="results-table-wrapper">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Biomarcador</th>
+                        <th>Valor</th>
+                        <th>Unidade</th>
+                        <th>Referência</th>
+                        <th>Status</th>
+                        {% if previous_exam %}<th>Anterior</th>{% endif %}
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr class="{% if r.is_abnormal %}row-abnormal{% endif %}">
+                        <td><strong>{{ r.biomarker.name }}</strong></td>
+                        <td class="value-cell {% if r.is_abnormal %}value-abnormal{% endif %}">
+                            {{ r.value }}
+                        </td>
+                        <td>{{ r.biomarker.unit }}</td>
+                        <td class="ref-cell">
+                            {% if r.ref_min is not None and r.ref_max is not None %}
+                                {{ r.ref_min }} - {{ r.ref_max }}
+                            {% elif r.ref_max is not None %}
+                                &lt; {{ r.ref_max }}
+                            {% elif r.ref_min is not None %}
+                                &gt; {{ r.ref_min }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.is_abnormal %}
+                                <span class="badge badge-warning">Alterado</span>
+                            {% else %}
+                                <span class="badge badge-success">Normal</span>
+                            {% endif %}
+                        </td>
+                        {% if previous_exam %}
+                        <td class="comparison-cell">
+                            {% with comp=history_comparison|get_item:r.biomarker_id %}
+                            {% if comp %}
+                                <span class="comparison-value">{{ comp.previous_value }}</span>
+                                <span class="comparison-pct {% if comp.pct > 0 %}pct-up{% elif comp.pct < 0 %}pct-down{% endif %}">
+                                    {% if comp.pct > 0 %}+{% endif %}{{ comp.pct }}%
+                                </span>
+                            {% else %}
+                                -
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+                        {% endif %}
+                        <td>
+                            <a href="{% url 'biomarker_chart' r.biomarker.code %}" class="btn-icon" title="Ver gráfico">
+                                📊
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="disclaimer-box">
+    <strong>AVISO IMPORTANTE:</strong> Esta análise é gerada por inteligência artificial e tem caráter exclusivamente informativo.
+    Não constitui diagnóstico médico. Consulte sempre um profissional de saúde qualificado para interpretar seus exames.
+</div>
+{% endblock %}

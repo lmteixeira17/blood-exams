@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Blood Lab</title>
+    <link rel="stylesheet" href="{% static 'core/style.css' %}">
+</head>
+<body class="auth-body">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <span class="auth-icon">🩸</span>
+                <h1>Blood Lab</h1>
+                <p>Sistema de Gerenciamento de Exames de Sangue</p>
+            </div>
+
+            {% if form.errors %}
+            <div class="alert alert-error">
+                Usuário ou senha incorretos. Tente novamente.
+            </div>
+            {% endif %}
+
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="id_username">Usuário</label>
+                    <input type="text" name="username" id="id_username" required autofocus
+                           placeholder="Seu nome de usuário">
+                </div>
+                <div class="form-group">
+                    <label for="id_password">Senha</label>
+                    <input type="password" name="password" id="id_password" required
+                           placeholder="Sua senha">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Entrar</button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Não tem conta? <a href="{% url 'register' %}">Criar conta</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

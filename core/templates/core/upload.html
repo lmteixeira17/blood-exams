@@ -1,0 +1,76 @@
+{% extends "core/base.html" %}
+
+{% block title %}Enviar Exame - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Enviar Exame de Sangue</h1>
+</div>
+
+<div class="upload-container">
+    <form method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="alert alert-error">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Drag and Drop Area -->
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-content">
+                <div class="drop-icon">📄</div>
+                <p class="drop-text">Arraste o arquivo aqui ou clique para selecionar</p>
+                <p class="drop-hint">PDF, JPG ou PNG - Máximo 20MB</p>
+                <input type="file" name="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png"
+                       class="drop-input" required>
+            </div>
+            <div class="file-preview" id="filePreview" style="display:none">
+                <span class="file-name" id="fileName"></span>
+                <button type="button" class="btn-remove" id="removeFile">&times;</button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_exam_date">Data do Exame *</label>
+                <input type="date" name="exam_date" id="id_exam_date" required>
+            </div>
+            <div class="form-group">
+                <label for="id_lab_name">Laboratório (opcional)</label>
+                <input type="text" name="lab_name" id="id_lab_name"
+                       placeholder="Ex: Laboratório Fleury">
+            </div>
+        </div>
+
+        <div class="upload-info">
+            <h3>Como funciona?</h3>
+            <ol>
+                <li>Envie o PDF ou foto do seu exame de sangue</li>
+                <li>Nossa IA (GPT-4 Vision) irá ler e extrair todos os biomarcadores</li>
+                <li>Os valores serão salvos no seu histórico</li>
+                <li>Você receberá uma análise comparativa com exames anteriores</li>
+            </ol>
+            <p class="upload-warning">O processamento pode levar de 15 a 60 segundos dependendo do tamanho do exame.</p>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-full" id="submitBtn">
+            <span id="submitText">Enviar e Processar</span>
+            <span id="submitLoading" style="display:none">
+                <span class="spinner"></span> Processando com IA...
+            </span>
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    initUploadForm();
+</script>
+{% endblock %}

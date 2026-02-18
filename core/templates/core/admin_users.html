@@ -1,0 +1,75 @@
+{% extends "core/base.html" %}
+
+{% block title %}Gerenciar Usuários - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Gerenciar Usuários</h1>
+</div>
+
+<div class="section">
+    <div class="results-table-wrapper">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>Usuário</th>
+                    <th>Nome</th>
+                    <th>E-mail</th>
+                    <th>Exames</th>
+                    <th>Cadastro</th>
+                    <th>Ativo</th>
+                    <th>Assinante</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td>{{ u.get_full_name|default:"-" }}</td>
+                    <td>{{ u.email|default:"-" }}</td>
+                    <td>{{ u.exam_count }}</td>
+                    <td>{{ u.date_joined|date:"d/m/Y" }}</td>
+                    <td>
+                        {% if u.is_active %}
+                            <span class="badge badge-success">Sim</span>
+                        {% else %}
+                            <span class="badge badge-warning">Não</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.profile.is_active_subscriber %}
+                            <span class="badge badge-success">Sim</span>
+                        {% else %}
+                            <span class="badge badge-warning">Não</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not u.is_superuser %}
+                        <form method="post" style="display:inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="user_id" value="{{ u.id }}">
+                            <input type="hidden" name="action" value="toggle_active">
+                            <button type="submit" class="btn btn-sm btn-outline">
+                                {% if u.is_active %}Desativar{% else %}Ativar{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" style="display:inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="user_id" value="{{ u.id }}">
+                            <input type="hidden" name="action" value="toggle_subscriber">
+                            <button type="submit" class="btn btn-sm btn-outline">
+                                {% if u.profile.is_active_subscriber %}Cancelar Assin.{% else %}Ativar Assin.{% endif %}
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="badge">Admin</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

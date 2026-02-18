@@ -1,0 +1,43 @@
+{% extends "core/base.html" %}
+
+{% block title %}Histórico de Exames - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Histórico de Exames</h1>
+    <a href="{% url 'upload' %}" class="btn btn-primary">+ Enviar Exame</a>
+</div>
+
+{% if exams %}
+<div class="section">
+    <div class="exam-list">
+        {% for exam in exams %}
+        <a href="{% url 'exam_detail' exam.id %}" class="exam-list-item">
+            <div class="exam-list-info">
+                <div class="exam-list-date">{{ exam.exam_date|date:"d/m/Y" }}</div>
+                <div class="exam-list-lab">{{ exam.lab_name|default:"Laboratório não informado" }}</div>
+            </div>
+            <div class="exam-list-stats">
+                {% if exam.status == 'completed' %}
+                <span class="badge">{{ exam.result_count }} resultados</span>
+                {% if exam.abnormal_count > 0 %}
+                <span class="badge badge-warning">{{ exam.abnormal_count }} alterados</span>
+                {% endif %}
+                {% endif %}
+                <span class="badge badge-{{ exam.status }}">{{ exam.get_status_display }}</span>
+                <span class="badge badge-file">{{ exam.get_file_type_display }}</span>
+            </div>
+            <span class="exam-list-arrow">&rarr;</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <h2>Nenhum exame encontrado</h2>
+    <p>Envie seu primeiro exame de sangue para começar.</p>
+    <a href="{% url 'upload' %}" class="btn btn-primary btn-lg">Enviar Primeiro Exame</a>
+</div>
+{% endif %}
+{% endblock %}

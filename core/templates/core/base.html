@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Exames de Sangue{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'core/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{% url 'dashboard' %}" class="nav-brand">
+                <span class="nav-icon">🩸</span>
+                <span>Blood Lab</span>
+            </a>
+            {% if user.is_authenticated %}
+            <div class="nav-links">
+                <a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+                <a href="{% url 'upload' %}" class="nav-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}">Enviar Exame</a>
+                <a href="{% url 'exam_history' %}" class="nav-link {% if request.resolver_match.url_name == 'exam_history' %}active{% endif %}">Histórico</a>
+                {% if user.is_superuser %}
+                <a href="{% url 'admin_users' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_users' %}active{% endif %}">Usuários</a>
+                {% endif %}
+            </div>
+            <div class="nav-user">
+                <a href="{% url 'profile' %}" class="nav-link">{{ user.first_name|default:user.username }}</a>
+                <a href="{% url 'logout' %}" class="nav-link nav-logout">Sair</a>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    {% if messages %}
+    <div class="messages-container">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">
+            {{ message }}
+            <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p><strong>AVISO:</strong> Este sistema é apenas informativo. Os resultados e análises não substituem a consulta com um profissional de saúde qualificado.</p>
+            <p>&copy; 2026 Blood Lab - Sistema de Gerenciamento de Exames</p>
+        </div>
+    </footer>
+
+    <script src="{% static 'core/app.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
