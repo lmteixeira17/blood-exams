@@ -200,6 +200,16 @@ BIOMARKERS = [
     {"name": "Globulinas", "code": "GLOB", "unit": "g/dL", "category": "Proteínas",
      "ref_min_male": 2.0, "ref_max_male": 3.5, "ref_min_female": 2.0, "ref_max_female": 3.5,
      "aliases": "Globulin", "description": "Proteínas imunológicas e de transporte."},
+
+    # ===== BIOMARCADORES ADICIONAIS (previnem mapeamentos errados) =====
+    {"name": "Colesterol Não-HDL", "code": "CNHDL", "unit": "mg/dL", "category": "Lipidograma",
+     "ref_min_male": None, "ref_max_male": 160, "ref_min_female": None, "ref_max_female": 160,
+     "aliases": "Colesterol Nao-HDL,Non-HDL Cholesterol,Col. Não-HDL,Col Nao HDL",
+     "description": "Colesterol total menos HDL. Inclui LDL, VLDL e outras partículas aterogênicas."},
+    {"name": "Glicose Média Estimada", "code": "EAG", "unit": "mg/dL", "category": "Glicemia",
+     "ref_min_male": None, "ref_max_male": 117, "ref_min_female": None, "ref_max_female": 117,
+     "aliases": "eAG,Estimated Average Glucose,Glicose Media Estimada,Glicemia Média Estimada,Glicemia Media Estimada",
+     "description": "Estimativa da glicose média dos últimos 2-3 meses, derivada da HbA1c. Ref: <117 mg/dL corresponde a HbA1c <5.7%."},
 ]
 
 

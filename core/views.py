@@ -13,7 +13,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .ai_service import process_exam
+from .ai_service import generate_trend_analysis, process_exam
 from .forms import ExamUploadForm, ProfileForm, RegistrationForm
 from .models import AIAnalysis, Biomarker, Exam, ExamResult
 
@@ -43,18 +43,98 @@ def dashboard_view(request):
     total_exams = user_exams.count()
     last_exam = user_exams.first()
 
-    # Get key biomarker trends for charts
     chart_data = {}
-    if total_exams > 0:
-        # Get most common biomarkers for this user
+    category_health = {}
+    critical_biomarkers = []
+    normal_count = 0
+    total_results = 0
+    abnormal_count = 0
+    analysis_data = None
+
+    if total_exams > 0 and last_exam:
+        # All results from the last exam
+        last_results = last_exam.results.select_related('biomarker')
+        total_results = last_results.count()
+        abnormal_count = last_results.filter(is_abnormal=True).count()
+        normal_count = total_results - abnormal_count
+
+        # Category health for radar chart: % normal per category
+        cat_stats = {}
+        for r in last_results:
+            cat = r.biomarker.category
+            if cat not in cat_stats:
+                cat_stats[cat] = {'total': 0, 'normal': 0}
+            cat_stats[cat]['total'] += 1
+            if not r.is_abnormal:
+                cat_stats[cat]['normal'] += 1
+        for cat, stats in cat_stats.items():
+            if stats['total'] > 0:
+                category_health[cat] = {
+                    'pct_normal': round(stats['normal'] / stats['total'] * 100)
+                }
+
+        # Critical biomarkers for gauge and deviation bar charts
+        for r in last_results.filter(is_abnormal=True):
+            if r.ref_min is not None and r.ref_max is not None:
+                val = float(r.value)
+                rmin = float(r.ref_min)
+                rmax = float(r.ref_max)
+                if val > rmax and rmax > 0:
+                    deviation = round((val - rmax) / rmax * 100, 1)
+                    status = 'high'
+                elif val < rmin and rmin > 0:
+                    deviation = round((rmin - val) / rmin * 100, 1)
+                    status = 'low'
+                else:
+                    continue
+                critical_biomarkers.append({
+                    'name': r.biomarker.name,
+                    'code': r.biomarker.code,
+                    'unit': r.biomarker.unit,
+                    'value': val,
+                    'ref_min': rmin,
+                    'ref_max': rmax,
+                    'deviation': deviation,
+                    'status': status,
+                })
+        critical_biomarkers.sort(key=lambda x: x['deviation'], reverse=True)
+
+        # AI analysis from last exam (enrich with biomarker codes for links)
+        try:
+            analysis = last_exam.analysis
+            name_to_code = {
+                r.biomarker.name.lower(): r.biomarker.code for r in last_results
+            }
+
+            def _enrich_with_codes(items):
+                enriched = []
+                for item in (items or []):
+                    copy = dict(item)
+                    if not copy.get('code'):
+                        bm_name = copy.get('biomarker', '').lower()
+                        copy['code'] = name_to_code.get(bm_name, '')
+                    enriched.append(copy)
+                return enriched
+
+            analysis_data = {
+                'summary': analysis.summary,
+                'alerts': _enrich_with_codes(analysis.alerts),
+                'improvements': _enrich_with_codes(analysis.improvements),
+                'deteriorations': _enrich_with_codes(analysis.deteriorations),
+                'recommendations': analysis.recommendations,
+            }
+        except AIAnalysis.DoesNotExist:
+            pass
+
+        # Evolution charts - top biomarkers across all exams
         top_biomarkers = (
             ExamResult.objects
             .filter(exam__user=request.user, exam__status='completed')
-            .values('biomarker__id', 'biomarker__name', 'biomarker__code', 'biomarker__unit')
+            .values('biomarker__id', 'biomarker__name', 'biomarker__code',
+                    'biomarker__unit', 'biomarker__category')
             .annotate(count=Count('id'))
-            .order_by('-count')[:8]
+            .order_by('-count')
         )
-
         for bm in top_biomarkers:
             results = (
                 ExamResult.objects
@@ -70,6 +150,7 @@ def dashboard_view(request):
                 chart_data[bm['biomarker__code']] = {
                     'name': bm['biomarker__name'],
                     'unit': bm['biomarker__unit'],
+                    'category': bm['biomarker__category'],
                     'dates': [r.exam.exam_date.isoformat() for r in results],
                     'values': [float(r.value) for r in results],
                     'ref_min': [float(r.ref_min) if r.ref_min else None for r in results],
@@ -79,16 +160,17 @@ def dashboard_view(request):
     # Recent exams
     recent_exams = user_exams[:5]
 
-    # Abnormal count from last exam
-    abnormal_count = 0
-    if last_exam:
-        abnormal_count = last_exam.results.filter(is_abnormal=True).count()
-
     context = {
         'total_exams': total_exams,
         'last_exam': last_exam,
         'abnormal_count': abnormal_count,
+        'normal_count': normal_count,
+        'total_results': total_results,
         'chart_data_json': json.dumps(chart_data),
+        'category_health_json': json.dumps(category_health),
+        'critical_biomarkers_json': json.dumps(critical_biomarkers),
+        'analysis_data': analysis_data,
+        'analysis_data_json': json.dumps(analysis_data),
         'recent_exams': recent_exams,
     }
     return render(request, 'core/dashboard.html', context)
@@ -249,12 +331,20 @@ def biomarker_chart_view(request, code):
         gender = request.user.profile.gender
     ref_range = biomarker.get_ref_range(gender)
 
+    # Generate trend analysis (cached, only calls GPT-4 when data changes)
+    trend_analysis = None
+    if results.count() >= 2:
+        trend_analysis = generate_trend_analysis(
+            biomarker, results, ref_range[0], ref_range[1], request.user
+        )
+
     context = {
         'biomarker': biomarker,
         'chart_data_json': json.dumps(chart_data),
         'ref_min': ref_range[0],
         'ref_max': ref_range[1],
         'results': results,
+        'trend_analysis': trend_analysis,
     }
     return render(request, 'core/biomarker_chart.html', context)
 

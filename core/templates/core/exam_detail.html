@@ -106,6 +106,44 @@
 </div>
 {% endif %}
 
+<!-- Validation Status Banner -->
+{% if exam.validation_flags.exists %}
+<div class="section validation-section">
+    <div class="validation-header">
+        <h2 class="section-title" style="border:none;margin:0;padding:0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            Valida&ccedil;&atilde;o de Dados
+        </h2>
+        {% if exam.validation_status == 'clean' %}
+            <span class="badge badge-success">Aprovado</span>
+        {% elif exam.validation_status == 'warnings' %}
+            <span class="badge badge-warning">{{ exam.unresolved_flag_count }} Alertas</span>
+        {% else %}
+            <span class="badge badge-danger">{{ exam.unresolved_flag_count }} Erros</span>
+        {% endif %}
+    </div>
+
+    {% for flag in exam.validation_flags.all %}
+    <div class="validation-flag flag-{{ flag.severity }}">
+        <span class="flag-icon">
+            {% if flag.severity == 'error' %}&#x274C;{% elif flag.severity == 'warning' %}&#x26A0;{% elif flag.severity == 'auto_corrected' %}&#x1F527;{% else %}&#x2139;{% endif %}
+        </span>
+        <div class="flag-content">
+            <strong>{{ flag.biomarker_code }}</strong>: {{ flag.message }}
+            {% if flag.original_value and flag.corrected_value %}
+                <span class="flag-correction">
+                    {{ flag.original_value }} &rarr; {{ flag.corrected_value }}
+                </span>
+            {% endif %}
+        </div>
+        {% if flag.severity == 'error' and not flag.resolved %}
+        <span class="flag-action">Requer revis&atilde;o</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Results Table -->
 <div class="section">
     <h2 class="section-title">Resultados</h2>
@@ -117,10 +155,11 @@
             <table class="results-table">
                 <thead>
                     <tr>
+                        <th></th>
                         <th>Biomarcador</th>
                         <th>Valor</th>
                         <th>Unidade</th>
-                        <th>Referência</th>
+                        <th>Refer&ecirc;ncia</th>
                         <th>Status</th>
                         {% if previous_exam %}<th>Anterior</th>{% endif %}
                         <th></th>
@@ -129,6 +168,21 @@
                 <tbody>
                     {% for r in results %}
                     <tr class="{% if r.is_abnormal %}row-abnormal{% endif %}">
+                        <td class="validation-cell">
+                            {% with vstatus=r.validation_status %}
+                            {% if vstatus == 'error' %}
+                                <span class="validation-icon validation-error" title="Valor suspeito">&#x274C;</span>
+                            {% elif vstatus == 'warning' %}
+                                <span class="validation-icon validation-warning" title="Aten&ccedil;&atilde;o">&#x26A0;</span>
+                            {% elif vstatus == 'auto_corrected' %}
+                                <span class="validation-icon validation-corrected" title="Corrigido automaticamente">&#x1F527;</span>
+                            {% elif vstatus == 'info' %}
+                                <span class="validation-icon validation-info" title="Informativo">&#x2139;</span>
+                            {% else %}
+                                <span class="validation-icon validation-ok" title="OK">&#x2705;</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
                         <td><strong>{{ r.biomarker.name }}</strong></td>
                         <td class="value-cell {% if r.is_abnormal %}value-abnormal{% endif %}">
                             {{ r.value }}

@@ -203,6 +203,20 @@ class Exam(models.Model):
     def abnormal_count(self):
         return self.results.filter(is_abnormal=True).count()
 
+    @property
+    def validation_status(self):
+        """Overall validation status: 'clean', 'warnings', or 'errors'."""
+        flags = self.validation_flags.filter(resolved=False)
+        if flags.filter(severity='error').exists():
+            return 'errors'
+        if flags.filter(severity__in=['warning', 'auto_corrected']).exists():
+            return 'warnings'
+        return 'clean'
+
+    @property
+    def unresolved_flag_count(self):
+        return self.validation_flags.filter(resolved=False).count()
+
 
 class ExamResult(models.Model):
     """Individual biomarker value extracted from an exam."""
@@ -245,27 +259,44 @@ class ExamResult(models.Model):
     def __str__(self):
         return f"{self.biomarker.name}: {self.value} {self.biomarker.unit}"
 
+    def _get_standard_ref(self):
+        """Get standard reference values from Biomarker catalog based on user gender."""
+        try:
+            gender = self.exam.user.profile.gender
+        except Exception:
+            gender = 'M'
+        if gender == 'F':
+            return (self.biomarker.ref_min_female, self.biomarker.ref_max_female)
+        return (self.biomarker.ref_min_male, self.biomarker.ref_max_male)
+
     def save(self, *args, **kwargs):
+        # Always use standard scientific reference values from Biomarker model
+        std_min, std_max = self._get_standard_ref()
+        self.ref_min = std_min
+        self.ref_max = std_max
+
         # Auto-detect abnormal values
-        ref_min = self.ref_min or (
-            self.biomarker.ref_min_female if hasattr(self.exam, 'user') and
-            hasattr(self.exam.user, 'profile') and
-            self.exam.user.profile.gender == 'F'
-            else self.biomarker.ref_min_male
-        )
-        ref_max = self.ref_max or (
-            self.biomarker.ref_max_female if hasattr(self.exam, 'user') and
-            hasattr(self.exam.user, 'profile') and
-            self.exam.user.profile.gender == 'F'
-            else self.biomarker.ref_max_male
-        )
-        if ref_min is not None and self.value < ref_min:
+        if self.ref_min is not None and self.value < self.ref_min:
             self.is_abnormal = True
-        elif ref_max is not None and self.value > ref_max:
+        elif self.ref_max is not None and self.value > self.ref_max:
             self.is_abnormal = True
         else:
             self.is_abnormal = False
         super().save(*args, **kwargs)
+
+    @property
+    def validation_status(self):
+        """Validation status for this specific result."""
+        flags = self.validation_flags.filter(resolved=False)
+        if flags.filter(severity='error').exists():
+            return 'error'
+        if flags.filter(severity='warning').exists():
+            return 'warning'
+        if flags.filter(severity='auto_corrected').exists():
+            return 'auto_corrected'
+        if flags.filter(severity='info').exists():
+            return 'info'
+        return 'clean'
 
 
 class AIAnalysis(models.Model):
@@ -316,3 +347,100 @@ class AIAnalysis(models.Model):
 
     def __str__(self):
         return f"Análise do Exame {self.exam.exam_date} - {self.exam.user.username}"
+
+
+class ExamValidation(models.Model):
+    """Validation flags generated during exam processing."""
+
+    SEVERITY_CHOICES = [
+        ('info', 'Informativo'),
+        ('warning', 'Atenção'),
+        ('error', 'Erro'),
+        ('auto_corrected', 'Corrigido Automaticamente'),
+    ]
+
+    CATEGORY_CHOICES = [
+        ('physiological', 'Faixa Fisiológica'),
+        ('cross_biomarker', 'Validação Cruzada'),
+        ('wbc_percentage', 'Leucograma Percentual'),
+        ('duplicate_exam', 'Exame Duplicado'),
+        ('historical', 'Consistência Histórica'),
+        ('low_confidence', 'Baixa Confiança IA'),
+        ('unmatched', 'Biomarcador Não Identificado'),
+    ]
+
+    exam = models.ForeignKey(
+        Exam, on_delete=models.CASCADE, related_name='validation_flags',
+        verbose_name='Exame'
+    )
+    exam_result = models.ForeignKey(
+        ExamResult, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='validation_flags',
+        verbose_name='Resultado'
+    )
+    biomarker_code = models.CharField(max_length=50, verbose_name='Código do Biomarcador')
+    severity = models.CharField(
+        max_length=20, choices=SEVERITY_CHOICES,
+        verbose_name='Severidade'
+    )
+    category = models.CharField(
+        max_length=30, choices=CATEGORY_CHOICES,
+        verbose_name='Categoria'
+    )
+    message = models.TextField(verbose_name='Mensagem')
+    original_value = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        verbose_name='Valor Original'
+    )
+    corrected_value = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        verbose_name='Valor Corrigido'
+    )
+    details = models.JSONField(default=dict, blank=True, verbose_name='Detalhes')
+    resolved = models.BooleanField(default=False, verbose_name='Resolvido')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Flag de Validação'
+        verbose_name_plural = 'Flags de Validação'
+        ordering = ['-severity', 'biomarker_code']
+        indexes = [
+            models.Index(fields=['exam', 'severity']),
+            models.Index(fields=['resolved']),
+        ]
+
+    def __str__(self):
+        return f"[{self.severity}] {self.biomarker_code}: {self.message[:80]}"
+
+
+class BiomarkerTrendAnalysis(models.Model):
+    """Cached AI-generated trend analysis for a biomarker's historical data."""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='trend_analyses',
+        verbose_name='Usuário'
+    )
+    biomarker = models.ForeignKey(
+        Biomarker, on_delete=models.CASCADE, related_name='trend_analyses',
+        verbose_name='Biomarcador'
+    )
+    analysis_text = models.TextField(verbose_name='Análise da Tendência')
+    result_count = models.PositiveIntegerField(
+        verbose_name='Qtd. Resultados',
+        help_text='Número de resultados usados para gerar a análise (para invalidação de cache)'
+    )
+    model_used = models.CharField(max_length=50, verbose_name='Modelo IA Utilizado')
+    input_tokens = models.PositiveIntegerField(default=0, verbose_name='Tokens de Entrada')
+    output_tokens = models.PositiveIntegerField(default=0, verbose_name='Tokens de Saída')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Análise de Tendência'
+        verbose_name_plural = 'Análises de Tendência'
+        unique_together = ['user', 'biomarker']
+        indexes = [
+            models.Index(fields=['user', 'biomarker']),
+        ]
+
+    def __str__(self):
+        return f"Tendência {self.biomarker.name} - {self.user.username}"

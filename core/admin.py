@@ -4,7 +4,10 @@ Django admin configuration for blood exams.
 
 from django.contrib import admin
 
-from .models import AIAnalysis, Biomarker, Exam, ExamResult, UserProfile
+from .models import (
+    AIAnalysis, Biomarker, BiomarkerTrendAnalysis, Exam,
+    ExamResult, ExamValidation, UserProfile,
+)
 
 
 @admin.register(UserProfile)
@@ -40,4 +43,20 @@ class ExamResultAdmin(admin.ModelAdmin):
 @admin.register(AIAnalysis)
 class AIAnalysisAdmin(admin.ModelAdmin):
     list_display = ['exam', 'model_used', 'input_tokens', 'output_tokens', 'created_at']
+    readonly_fields = ['input_tokens', 'output_tokens']
+
+
+@admin.register(ExamValidation)
+class ExamValidationAdmin(admin.ModelAdmin):
+    list_display = ['exam', 'biomarker_code', 'severity', 'category', 'message', 'resolved']
+    list_filter = ['severity', 'category', 'resolved']
+    search_fields = ['biomarker_code', 'message']
+    list_editable = ['resolved']
+
+
+@admin.register(BiomarkerTrendAnalysis)
+class BiomarkerTrendAnalysisAdmin(admin.ModelAdmin):
+    list_display = ['user', 'biomarker', 'result_count', 'model_used', 'created_at']
+    list_filter = ['model_used']
+    search_fields = ['biomarker__name', 'user__username']
     readonly_fields = ['input_tokens', 'output_tokens']
