@@ -158,6 +158,12 @@ Retorne APENAS um JSON valido (sem markdown, sem texto extra):
     "comparison_text": "Texto comparativo com exames anteriores. Se nao houver historico, deixe vazio."
 }}
 
+REGRAS CRITICAS PARA ALERTAS:
+- Inclua em "alerts" SOMENTE biomarcadores marcados com ALTO ou BAIXO na lista acima
+- Se um biomarcador esta DENTRO da faixa de referencia, NAO inclua como alerta, mesmo que o valor pareca alto/baixo na sua opiniao medica
+- Biomarcadores sem marcacao ALTO/BAIXO estao normais e NAO devem ser alertados
+- Exemplo: GGT=40 com referencia 10-71 esta NORMAL, NAO alertar
+
 IMPORTANTE: Esta analise e apenas informativa e nao substitui a consulta com um medico."""
 
 
@@ -566,11 +572,28 @@ def generate_ai_analysis(exam):
 
         analysis_data = json.loads(content)
 
+        # Post-process: filter out alerts for biomarkers that are actually normal
+        abnormal_names = {
+            r.biomarker.name.lower()
+            for r in current_results if r.is_abnormal
+        }
+        raw_alerts = analysis_data.get('alerts', [])
+        filtered_alerts = [
+            a for a in raw_alerts
+            if a.get('biomarker', '').lower() in abnormal_names
+        ]
+        if len(filtered_alerts) < len(raw_alerts):
+            removed = [a.get('biomarker') for a in raw_alerts if a not in filtered_alerts]
+            logger.info(
+                f"Exam {exam.id}: filtered {len(raw_alerts) - len(filtered_alerts)} "
+                f"false alerts (normal values): {removed}"
+            )
+
         AIAnalysis.objects.update_or_create(
             exam=exam,
             defaults={
                 'summary': analysis_data.get('summary', ''),
-                'alerts': analysis_data.get('alerts', []),
+                'alerts': filtered_alerts,
                 'improvements': analysis_data.get('improvements', []),
                 'deteriorations': analysis_data.get('deteriorations', []),
                 'recommendations': analysis_data.get('recommendations', ''),

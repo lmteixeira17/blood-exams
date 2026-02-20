@@ -11,24 +11,42 @@
 
 <!-- Summary Cards -->
 <div class="stats-grid">
-    <div class="stat-card">
+    <div class="stat-card stat-card--info">
+        <div class="stat-icon stat-icon--blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
         <div class="stat-value">{{ total_exams }}</div>
         <div class="stat-label">Exames Enviados</div>
     </div>
-    <div class="stat-card">
-        <div class="stat-value">
+    <div class="stat-card stat-card--date">
+        <div class="stat-icon stat-icon--purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="stat-value stat-value--sm">
             {% if last_exam %}{{ last_exam.exam_date|date:"d/m/Y" }}{% else %}-{% endif %}
         </div>
-        <div class="stat-label">Último Exame</div>
+        <div class="stat-label">&Uacute;ltimo Exame</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card stat-card--warning">
+        <div class="stat-icon stat-icon--yellow">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
         <div class="stat-value {% if abnormal_count > 0 %}text-warning{% endif %}">
             {{ abnormal_count }}
         </div>
         <div class="stat-label">Valores Alterados</div>
+        {% if total_results > 0 %}
+        <div class="stat-bar">
+            <div class="stat-bar-fill stat-bar-fill--warning" style="width: {% widthratio abnormal_count total_results 100 %}%"></div>
+        </div>
+        <div class="stat-bar-label">de {{ total_results }} biomarcadores</div>
+        {% endif %}
     </div>
-    <div class="stat-card">
-        <div class="stat-value">
+    <div class="stat-card stat-card--alert">
+        <div class="stat-icon stat-icon--red">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="stat-value {% if last_exam and last_exam.analysis and last_exam.analysis.alerts|length > 0 %}text-danger{% endif %}">
             {% if last_exam and last_exam.analysis %}
                 {{ last_exam.analysis.alerts|length }}
             {% else %}-{% endif %}
@@ -40,18 +58,167 @@
 {% if total_exams == 0 %}
 <!-- Empty state -->
 <div class="empty-state">
-    <div class="empty-icon">📋</div>
+    <div class="empty-icon">&#x1F4CB;</div>
     <h2>Nenhum exame enviado</h2>
-    <p>Envie seu primeiro exame de sangue para começar a acompanhar seus biomarcadores.</p>
+    <p>Envie seu primeiro exame de sangue para come&ccedil;ar a acompanhar seus biomarcadores.</p>
     <a href="{% url 'upload' %}" class="btn btn-primary btn-lg">Enviar Primeiro Exame</a>
 </div>
 {% else %}
 
-<!-- Charts Section -->
+<!-- AI Analysis Panel -->
+{% if analysis_data %}
+<div class="section ai-panel">
+    <div class="ai-panel-header">
+        <div class="ai-panel-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.1-.45 2.1-1.17 2.83L12 12l-2.83-3.17A4 4 0 0 1 12 2z"/><path d="M12 12l4 4-4 4-4-4 4-4z"/><path d="M2 12h4"/><path d="M18 12h4"/></svg>
+        </div>
+        <h2 class="section-title" style="border:none;margin:0;padding:0;">An&aacute;lise de Intelig&ecirc;ncia Artificial</h2>
+    </div>
+
+    <!-- Summary -->
+    {% if analysis_data.summary %}
+    <div class="ai-summary">
+        <div class="ai-summary-label">Resumo Geral</div>
+        <p>{{ analysis_data.summary }}</p>
+    </div>
+    {% endif %}
+
+    <div class="ai-grid">
+        <!-- Alerts -->
+        {% if analysis_data.alerts %}
+        <div class="ai-section ai-section--alerts">
+            <h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Alertas ({{ analysis_data.alerts|length }})
+            </h3>
+            {% for alert in analysis_data.alerts %}
+            <a href="{% if alert.code %}{% url 'biomarker_chart' alert.code %}{% else %}#{% endif %}" class="ai-alert-link">
+            <div class="ai-alert-item {% if alert.status == 'alto' or alert.status == 'high' %}ai-alert--high{% else %}ai-alert--low{% endif %}">
+                <span class="ai-alert-status">{% if alert.status == 'alto' or alert.status == 'high' %}&#x25B2;{% else %}&#x25BC;{% endif %}</span>
+                <div class="ai-alert-content">
+                    <strong>{{ alert.biomarker }}</strong>
+                    <span class="ai-alert-value">{{ alert.value }}</span>
+                    {% if alert.code %}<span class="ai-link-hint">Ver gr&aacute;fico &rarr;</span>{% endif %}
+                    <p>{{ alert.message }}</p>
+                </div>
+            </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Improvements & Deteriorations -->
+        <div class="ai-section ai-section--changes">
+            {% if analysis_data.improvements %}
+            <h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Melhorias
+            </h3>
+            {% for item in analysis_data.improvements %}
+            <a href="{% if item.code %}{% url 'biomarker_chart' item.code %}{% else %}#{% endif %}" class="ai-change-link">
+            <div class="ai-change-item ai-change--improvement">
+                <span class="ai-change-icon">&#x2191;</span>
+                <div>
+                    <strong>{{ item.biomarker }}</strong>
+                    {% if item.previous and item.current %}
+                    <span class="ai-change-values">{{ item.previous }} &rarr; {{ item.current }}</span>
+                    {% endif %}
+                    {% if item.code %}<span class="ai-link-hint ai-link-hint--green">Ver gr&aacute;fico &rarr;</span>{% endif %}
+                    <p>{{ item.message }}</p>
+                </div>
+            </div>
+            </a>
+            {% endfor %}
+            {% endif %}
+
+            {% if analysis_data.deteriorations %}
+            <h3 style="margin-top:16px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                Pioras
+            </h3>
+            {% for item in analysis_data.deteriorations %}
+            <a href="{% if item.code %}{% url 'biomarker_chart' item.code %}{% else %}#{% endif %}" class="ai-change-link">
+            <div class="ai-change-item ai-change--deterioration">
+                <span class="ai-change-icon">&#x2193;</span>
+                <div>
+                    <strong>{{ item.biomarker }}</strong>
+                    {% if item.previous and item.current %}
+                    <span class="ai-change-values">{{ item.previous }} &rarr; {{ item.current }}</span>
+                    {% endif %}
+                    {% if item.code %}<span class="ai-link-hint ai-link-hint--red">Ver gr&aacute;fico &rarr;</span>{% endif %}
+                    <p>{{ item.message }}</p>
+                </div>
+            </div>
+            </a>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    {% if analysis_data.recommendations %}
+    <div class="ai-recommendations">
+        <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            Recomenda&ccedil;&otilde;es
+        </h3>
+        <div class="ai-rec-content">{{ analysis_data.recommendations|linebreaksbr }}</div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Overview Charts Row -->
+<div class="overview-row">
+    <!-- Radar Chart - Health by Category -->
+    <div class="section overview-card">
+        <h2 class="section-title">Sa&uacute;de por Categoria</h2>
+        <div class="chart-container-medium">
+            <canvas id="radarChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Donut Chart - Normal vs Abnormal -->
+    <div class="section overview-card">
+        <h2 class="section-title">Distribui&ccedil;&atilde;o de Resultados</h2>
+        <div class="chart-container-medium">
+            <canvas id="donutChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Gauge Charts - Critical Biomarkers -->
+{% if critical_biomarkers_json != '[]' %}
 <div class="section">
-    <h2 class="section-title">Evolução dos Biomarcadores</h2>
-    <div class="charts-grid" id="chartsGrid">
-        <!-- Charts are rendered by JavaScript -->
+    <h2 class="section-title">Biomarcadores Cr&iacute;ticos</h2>
+    <div class="gauges-grid" id="gaugesGrid">
+        <!-- Rendered by JS -->
+    </div>
+</div>
+{% endif %}
+
+<!-- Deviation Bars Chart -->
+{% if critical_biomarkers_json != '[]' %}
+<div class="section">
+    <h2 class="section-title">Desvio dos Valores de Refer&ecirc;ncia</h2>
+    <div class="chart-container-large">
+        <canvas id="deviationChart"></canvas>
+    </div>
+</div>
+{% endif %}
+
+<!-- Biomarker Evolution Charts -->
+<div class="section">
+    <div class="section-title-row">
+        <h2 class="section-title" style="border:none;margin:0;padding:0;">Evolu&ccedil;&atilde;o dos Biomarcadores</h2>
+        <button id="compareToggleBtn" class="btn btn-outline btn-sm" onclick="toggleCompareMode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+            Comparar
+        </button>
+    </div>
+    <div id="comparePanel" class="compare-panel" style="display:none;"></div>
+    <div id="chartsGrid">
+        <!-- Charts are rendered by JavaScript, grouped by category -->
     </div>
 </div>
 
@@ -63,7 +230,7 @@
         <a href="{% url 'exam_detail' exam.id %}" class="exam-list-item">
             <div class="exam-list-info">
                 <div class="exam-list-date">{{ exam.exam_date|date:"d/m/Y" }}</div>
-                <div class="exam-list-lab">{{ exam.lab_name|default:"Laboratório não informado" }}</div>
+                <div class="exam-list-lab">{{ exam.lab_name|default:"Laborat&oacute;rio n&atilde;o informado" }}</div>
             </div>
             <div class="exam-list-stats">
                 <span class="badge">{{ exam.result_count }} resultados</span>
@@ -82,14 +249,58 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Floating compare bar -->
+<div id="compareBar" class="compare-bar" style="display:none;">
+    <div class="compare-bar-inner">
+        <span id="compareBarCount">0 selecionados</span>
+        <div class="compare-bar-actions">
+            <button class="btn btn-outline btn-sm" onclick="clearCompareSelection()">Limpar</button>
+            <button id="compareBarBtn" class="btn btn-primary btn-sm" onclick="showComparison()" disabled>Ver Comparativo</button>
+        </div>
+    </div>
+</div>
+
 {% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
     var chartData = {{ chart_data_json|safe }};
-    if (Object.keys(chartData).length > 0) {
-        renderDashboardCharts(chartData);
-    }
+    var categoryHealth = {{ category_health_json|safe }};
+    var criticalBiomarkers = {{ critical_biomarkers_json|safe }};
+    var analysisData = {{ analysis_data_json|safe }};
+    var normalCount = {{ normal_count }};
+    var abnormalCount = {{ abnormal_count }};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Render all dashboard charts
+        if (Object.keys(chartData).length > 0) {
+            renderDashboardCharts(chartData);
+        }
+
+        // Radar chart
+        if (Object.keys(categoryHealth).length > 0) {
+            renderRadarChart('radarChart', categoryHealth);
+        }
+
+        // Donut chart
+        if (normalCount + abnormalCount > 0) {
+            renderDonutChart('donutChart', normalCount, abnormalCount);
+        }
+
+        // Gauge charts
+        if (criticalBiomarkers && criticalBiomarkers.length > 0) {
+            renderGaugeCharts('gaugesGrid', criticalBiomarkers);
+        }
+
+        // Deviation bars
+        if (criticalBiomarkers && criticalBiomarkers.length > 0) {
+            renderDeviationBars('deviationChart', criticalBiomarkers);
+        }
+
+        // Animate stat values
+        animateStatValues();
+    });
 </script>
 {% endblock %}
