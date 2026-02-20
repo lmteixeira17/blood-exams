@@ -53,6 +53,19 @@ REGRAS IMPORTANTES:
 - Se o valor for "<0.1" ou ">1000", use o numero (0.1 ou 1000)
 - Nao invente valores. Se nao conseguir ler, omita o biomarcador
 
+PADRONIZACAO DE UNIDADES (CRITICO - use SEMPRE a unidade do catalogo):
+- Se o exame usa unidade diferente da do catalogo, CONVERTA o valor para a unidade do catalogo
+- mg/L -> mg/dL: dividir por 10 (ex: Vitamina C 5.3 mg/L = 0.53 mg/dL)
+- ug/L -> ng/mL: mesmo valor (1 ug/L = 1 ng/mL)
+- nmol/L -> ng/dL (Testosterona): multiplicar por 0.02884
+- pmol/L -> pg/mL (T4 Livre, T3 Livre): multiplicar por 0.0777 (T4L) ou 0.651 (T3L)
+- umol/L -> mg/dL (Creatinina): dividir por 88.4
+- umol/L -> mg/dL (Acido Urico): dividir por 59.48
+- mmol/L -> mg/dL (Glicose): multiplicar por 18.02
+- mmol/L -> mg/dL (Colesterol): multiplicar por 38.67
+- mmol/L -> mg/dL (Triglicerides): multiplicar por 88.57
+- O campo "unit" deve ser SEMPRE a unidade do catalogo, nao a do exame original
+
 REGRAS DE CONFIANCA:
 - confidence="high": voce tem certeza do match com o catalogo
 - confidence="low": o match e ambiguo ou incerto

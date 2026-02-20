@@ -367,6 +367,7 @@ class ExamValidation(models.Model):
         ('historical', 'Consistência Histórica'),
         ('low_confidence', 'Baixa Confiança IA'),
         ('unmatched', 'Biomarcador Não Identificado'),
+        ('unit_mismatch', 'Incompatibilidade de Unidade'),
     ]
 
     exam = models.ForeignKey(

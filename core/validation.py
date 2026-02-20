@@ -10,6 +10,7 @@ Layers:
   C. WBC differential percentage detection + auto-conversion
   D. Duplicate exam detection
   E. Historical consistency checks
+  F. Unit standardization (detects and auto-converts wrong units)
 """
 
 import logging
@@ -36,6 +37,7 @@ class FlagCategory(Enum):
     HISTORICAL = 'historical'
     LOW_CONFIDENCE = 'low_confidence'
     UNMATCHED = 'unmatched'
+    UNIT_MISMATCH = 'unit_mismatch'
 
 
 @dataclass
@@ -143,6 +145,37 @@ PHYSIOLOGICAL_LIMITS = {
 # Biomarkers where large swings between exams are expected
 VOLATILE_CODES = {'INS', 'CORT', 'PRL', 'HGH', 'VHS', 'PCR', 'BASO', 'EOS'}
 
+# =============================================================================
+# Unit conversion rules: detect when a value was likely stored in the wrong unit.
+# Each entry: biomarker_code -> list of (factor, wrong_unit, correct_unit, description)
+# If value / factor falls within the reference range, it was likely in wrong_unit.
+# =============================================================================
+UNIT_CONVERSIONS = {
+    # mg/L -> mg/dL (divide by 10)
+    'VITC':  [(10, 'mg/L', 'mg/dL')],
+    'PCR':   [(10, 'mg/L', 'mg/dL')],
+    # ug/dL -> ng/mL for some, or ng/dL -> ng/mL (factor 0.1 or 10)
+    'FERR':  [(0.001, '\u00b5g/L', 'ng/mL')],
+    # umol/L -> mg/dL conversions
+    'CREA':  [(88.4, '\u00b5mol/L', 'mg/dL')],
+    'AU':    [(59.48, '\u00b5mol/L', 'mg/dL')],
+    'BILT':  [(17.1, '\u00b5mol/L', 'mg/dL')],
+    # mmol/L -> mg/dL conversions
+    'GLI':   [(0.0555, 'mmol/L', 'mg/dL')],
+    'CT':    [(0.02586, 'mmol/L', 'mg/dL')],
+    'HDL':   [(0.02586, 'mmol/L', 'mg/dL')],
+    'LDL':   [(0.02586, 'mmol/L', 'mg/dL')],
+    'TG':    [(0.01129, 'mmol/L', 'mg/dL')],
+    'UREA':  [(0.1665, 'mmol/L', 'mg/dL')],
+    'CA':    [(0.2495, 'mmol/L', 'mg/dL')],
+    # pg/mL -> ng/dL (divide by 10)
+    'TESTO': [(0.1, 'pg/mL', 'ng/dL')],
+    # pmol/L -> ng/dL (T4 Livre)
+    'T4L':   [(12.87, 'pmol/L', 'ng/dL')],
+    # nmol/L -> ug/dL (Cortisol)
+    'CORT':  [(0.03625, 'nmol/L', '\u00b5g/dL')],
+}
+
 
 def validate_exam(exam):
     """
@@ -160,6 +193,7 @@ def validate_exam(exam):
     results_by_code = {r.biomarker.code: r for r in results}
 
     flags = []
+    flags.extend(_check_unit_mismatch(results_by_code))
     flags.extend(_check_physiological_ranges(results_by_code))
     flags.extend(_check_lipid_formula(results_by_code))
     flags.extend(_check_wbc_sum(results_by_code))
@@ -167,6 +201,57 @@ def validate_exam(exam):
     flags.extend(_check_duplicate_exam(exam, results_by_code))
     flags.extend(_check_historical_consistency(exam, results_by_code))
 
+    return flags
+
+
+# ---- Rule F: Unit Mismatch Detection ----
+
+def _check_unit_mismatch(results_by_code):
+    """Detect values stored in wrong units and auto-correct them.
+
+    Strategy: if a value is outside the physiological range but dividing (or
+    multiplying) by a known conversion factor brings it into the reference
+    range, the value was likely extracted in the wrong unit.
+    """
+    flags = []
+    for code, result in results_by_code.items():
+        if code not in UNIT_CONVERSIONS or code not in PHYSIOLOGICAL_LIMITS:
+            continue
+
+        val = float(result.value)
+        abs_min, abs_max = PHYSIOLOGICAL_LIMITS[code]
+
+        # Only check if value is outside physiological limits
+        if abs_min <= val <= abs_max:
+            continue
+
+        ref_min = float(result.ref_min) if result.ref_min else abs_min
+        ref_max = float(result.ref_max) if result.ref_max else abs_max
+
+        for factor, wrong_unit, correct_unit in UNIT_CONVERSIONS[code]:
+            converted = val / factor
+            # Check if converted value falls in a reasonable range
+            if abs_min <= converted <= abs_max:
+                corrected = Decimal(str(round(converted, 4)))
+                flags.append(ValidationFlag(
+                    exam_result_id=result.id,
+                    biomarker_code=code,
+                    severity=FlagSeverity.AUTO_CORRECTED,
+                    category=FlagCategory.UNIT_MISMATCH,
+                    message=(
+                        f"{result.biomarker.name}: valor {val} parece estar em "
+                        f"{wrong_unit} em vez de {correct_unit}. "
+                        f"Convertido: {val} \u00f7 {factor} = {corrected} {correct_unit}"
+                    ),
+                    original_value=result.value,
+                    corrected_value=corrected,
+                    details={
+                        'factor': factor,
+                        'wrong_unit': wrong_unit,
+                        'correct_unit': correct_unit,
+                    },
+                ))
+                break  # Apply first matching conversion
     return flags
 
 
@@ -428,7 +513,7 @@ def _check_historical_consistency(exam, results_by_code):
 # ---- Auto-corrections ----
 
 def apply_auto_corrections(exam, flags):
-    """Apply auto-corrections for high-confidence fixes (WBC %, BASO estimation)."""
+    """Apply auto-corrections for high-confidence fixes (unit conversions, WBC %, BASO)."""
     from .models import ExamResult
 
     # Apply WBC percentage conversions
