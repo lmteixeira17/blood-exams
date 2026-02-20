@@ -599,6 +599,44 @@ a:hover { text-decoration: underline; }
     color: var(--text-muted);
 }
 
+/* ===== Trend Loading State ===== */
+.trend-loading {
+    text-align: center;
+    padding: 32px 16px;
+}
+
+.trend-loading-icon {
+    margin-bottom: 12px;
+    color: var(--accent-purple);
+}
+
+.trend-spinner {
+    animation: trendSpin 1.5s linear infinite;
+}
+
+@keyframes trendSpin {
+    to { transform: rotate(360deg); }
+}
+
+.trend-loading-text {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.trend-loading-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.trend-error-text {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 16px;
+}
+
 /* ===== Disclaimer ===== */
 .disclaimer-box {
     background: rgba(245, 158, 11, 0.08);

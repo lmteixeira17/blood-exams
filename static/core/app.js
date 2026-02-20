@@ -1179,7 +1179,16 @@ function normalizeToRefPercent(values, refMin, refMax) {
         var rmin = refMin[i];
         var rmax = refMax[i];
         if (rmin !== null && rmax !== null && rmax !== rmin) {
+            // Both bounds: 0% = ref_min, 100% = ref_max
             result.push(((values[i] - rmin) / (rmax - rmin)) * 100);
+        } else if (rmax !== null && rmax > 0 && rmin === null) {
+            // Only upper bound (e.g. Colesterol Total, LDL, Triglicerideos)
+            // 100% = at the limit, above = abnormal
+            result.push((values[i] / rmax) * 100);
+        } else if (rmin !== null && rmin > 0 && rmax === null) {
+            // Only lower bound (e.g. HDL)
+            // 100% = at the minimum, below = abnormal
+            result.push((values[i] / rmin) * 100);
         } else {
             result.push(null);
         }

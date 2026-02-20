@@ -331,12 +331,8 @@ def biomarker_chart_view(request, code):
         gender = request.user.profile.gender
     ref_range = biomarker.get_ref_range(gender)
 
-    # Generate trend analysis (cached, only calls GPT-4 when data changes)
-    trend_analysis = None
-    if results.count() >= 2:
-        trend_analysis = generate_trend_analysis(
-            biomarker, results, ref_range[0], ref_range[1], request.user
-        )
+    # Trend analysis is loaded asynchronously via AJAX to avoid blocking page render
+    has_enough_for_trend = results.count() >= 2
 
     context = {
         'biomarker': biomarker,
@@ -344,9 +340,38 @@ def biomarker_chart_view(request, code):
         'ref_min': ref_range[0],
         'ref_max': ref_range[1],
         'results': results,
-        'trend_analysis': trend_analysis,
+        'has_enough_for_trend': has_enough_for_trend,
     }
     return render(request, 'core/biomarker_chart.html', context)
+
+
+@login_required
+def biomarker_trend_api(request, code):
+    """AJAX endpoint: generate/return trend analysis for a biomarker."""
+    biomarker = get_object_or_404(Biomarker, code=code)
+
+    results = (
+        ExamResult.objects
+        .filter(exam__user=request.user, exam__status='completed', biomarker=biomarker)
+        .select_related('exam')
+        .order_by('exam__exam_date')
+    )
+
+    if results.count() < 2:
+        return JsonResponse({'status': 'insufficient_data'})
+
+    gender = ''
+    if hasattr(request.user, 'profile'):
+        gender = request.user.profile.gender
+    ref_range = biomarker.get_ref_range(gender)
+
+    analysis = generate_trend_analysis(
+        biomarker, results, ref_range[0], ref_range[1], request.user
+    )
+
+    if analysis:
+        return JsonResponse({'status': 'ok', 'analysis': analysis})
+    return JsonResponse({'status': 'error'})
 
 
 @login_required

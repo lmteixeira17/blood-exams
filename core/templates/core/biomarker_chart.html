@@ -10,7 +10,7 @@
         <p class="page-subtitle">
             {{ biomarker.category }} &bull; {{ biomarker.unit }}
             {% if ref_min and ref_max %}
-            &bull; Referência: {{ ref_min }} - {{ ref_max }}
+            &bull; Refer&ecirc;ncia: {{ ref_min }} - {{ ref_max }}
             {% endif %}
         </p>
     </div>
@@ -29,31 +29,43 @@
     </div>
 </div>
 
-{% if trend_analysis %}
-<div class="section ai-analysis trend-analysis">
+{% if has_enough_for_trend %}
+<div class="section ai-analysis trend-analysis" id="trendSection">
     <h2 class="section-title">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h20"/><path d="M5 20V8l5 4 4-8 6 6"/></svg>
         An&aacute;lise da Evolu&ccedil;&atilde;o
     </h2>
-    <div class="trend-analysis-content">
-        <p>{{ trend_analysis|linebreaksbr }}</p>
+    <div id="trendLoading" class="trend-loading">
+        <div class="trend-loading-icon">
+            <svg class="trend-spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div class="trend-loading-text">A IA est&aacute; analisando a tend&ecirc;ncia deste biomarcador...</div>
+        <div class="trend-loading-hint">Isso pode levar alguns segundos na primeira vez</div>
     </div>
-    <div class="disclaimer-inline">
-        <em>An&aacute;lise gerada por intelig&ecirc;ncia artificial com car&aacute;ter exclusivamente informativo.</em>
+    <div id="trendContent" style="display:none;">
+        <div class="trend-analysis-content">
+            <p id="trendText"></p>
+        </div>
+        <div class="disclaimer-inline">
+            <em>An&aacute;lise gerada por intelig&ecirc;ncia artificial com car&aacute;ter exclusivamente informativo.</em>
+        </div>
+    </div>
+    <div id="trendError" style="display:none;">
+        <p class="trend-error-text">N&atilde;o foi poss&iacute;vel gerar a an&aacute;lise neste momento.</p>
     </div>
 </div>
 {% endif %}
 
 {% if results %}
 <div class="section">
-    <h2 class="section-title">Histórico de Valores</h2>
+    <h2 class="section-title">Hist&oacute;rico de Valores</h2>
     <div class="results-table-wrapper">
         <table class="results-table">
             <thead>
                 <tr>
                     <th>Data</th>
                     <th>Valor</th>
-                    <th>Referência</th>
+                    <th>Refer&ecirc;ncia</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -84,9 +96,9 @@
 </div>
 {% else %}
 <div class="empty-state">
-    <div class="empty-icon">📊</div>
+    <div class="empty-icon">&#x1F4CA;</div>
     <h2>Sem dados</h2>
-    <p>Este biomarcador ainda não apareceu nos seus exames.</p>
+    <p>Este biomarcador ainda n&atilde;o apareceu nos seus exames.</p>
 </div>
 {% endif %}
 {% endblock %}
@@ -97,5 +109,43 @@
     if (biomarkerData.dates && biomarkerData.dates.length > 0) {
         renderBiomarkerChart('biomarkerChart', biomarkerData);
     }
+
+    {% if has_enough_for_trend %}
+    // Fetch trend analysis asynchronously
+    (function() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '{% url "biomarker_trend_api" biomarker.code %}');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onload = function() {
+            var loading = document.getElementById('trendLoading');
+            var content = document.getElementById('trendContent');
+            var error = document.getElementById('trendError');
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.status === 'ok' && data.analysis) {
+                        document.getElementById('trendText').innerHTML = data.analysis.replace(/\n/g, '<br>');
+                        loading.style.display = 'none';
+                        content.style.display = 'block';
+                    } else {
+                        loading.style.display = 'none';
+                        error.style.display = 'block';
+                    }
+                } catch(e) {
+                    loading.style.display = 'none';
+                    error.style.display = 'block';
+                }
+            } else {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+            }
+        };
+        xhr.onerror = function() {
+            document.getElementById('trendLoading').style.display = 'none';
+            document.getElementById('trendError').style.display = 'block';
+        };
+        xhr.send();
+    })();
+    {% endif %}
 </script>
 {% endblock %}

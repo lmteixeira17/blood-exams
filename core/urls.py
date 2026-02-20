@@ -25,6 +25,7 @@ urlpatterns = [
 
     # Biomarker charts
     path('biomarker/<str:code>/', views.biomarker_chart_view, name='biomarker_chart'),
+    path('biomarker/<str:code>/trend/', views.biomarker_trend_api, name='biomarker_trend_api'),
 
     # API
     path('api/biomarker/<str:code>/', views.api_biomarker_data, name='api_biomarker_data'),
