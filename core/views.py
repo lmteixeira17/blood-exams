@@ -3,19 +3,56 @@ Views for the blood exams management system.
 """
 
 import json
+import logging
+import threading
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
+from django.db import close_old_connections
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .ai_service import generate_trend_analysis, process_exam
-from .forms import ExamUploadForm, ProfileForm, RegistrationForm
-from .models import AIAnalysis, Biomarker, Exam, ExamResult
+from .forms import AdminUserForm, CompleteProfileForm, ExamUploadForm, ProfileForm, RegistrationForm, UserMedicationForm
+from .models import AIAnalysis, Biomarker, Exam, ExamMedication, ExamResult, Medication, UserMedication
+
+logger = logging.getLogger(__name__)
+
+
+def _process_exam_in_thread(exam_id):
+    """Run exam processing in a background thread."""
+    try:
+        close_old_connections()
+        exam = Exam.objects.get(id=exam_id)
+        process_exam(exam)
+    except Exception:
+        logger.exception("Background processing failed for exam %s", exam_id)
+        try:
+            exam = Exam.objects.get(id=exam_id)
+            if exam.status != "error":
+                exam.status = "error"
+                exam.error_message = "Erro inesperado no processamento em background."
+                exam.save(update_fields=["status", "error_message"])
+        except Exception:
+            pass
+    finally:
+        close_old_connections()
+
+
+def get_effective_user(request):
+    """Return impersonated user if admin is viewing-as, else request.user."""
+    if request.user.is_superuser:
+        uid = request.session.get('_impersonate_user_id')
+        if uid:
+            try:
+                return User.objects.get(id=uid)
+            except User.DoesNotExist:
+                del request.session['_impersonate_user_id']
+    return request.user
 
 
 def register_view(request):
@@ -27,7 +64,7 @@ def register_view(request):
         form = RegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             messages.success(request, 'Conta criada com sucesso! Bem-vindo.')
             return redirect('dashboard')
     else:
@@ -37,9 +74,30 @@ def register_view(request):
 
 
 @login_required
+def complete_profile_view(request):
+    """Collect required profile data (DOB and gender) on first login."""
+    profile = request.user.profile
+    if profile.date_of_birth and profile.gender:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        form = CompleteProfileForm(request.POST)
+        if form.is_valid():
+            profile.date_of_birth = form.cleaned_data['date_of_birth']
+            profile.gender = form.cleaned_data['gender']
+            profile.save()
+            return redirect('dashboard')
+    else:
+        form = CompleteProfileForm()
+
+    return render(request, 'core/complete_profile.html', {'form': form})
+
+
+@login_required
 def dashboard_view(request):
     """Main dashboard with summary stats and charts."""
-    user_exams = Exam.objects.filter(user=request.user, status='completed')
+    effective_user = get_effective_user(request)
+    user_exams = Exam.objects.filter(user=effective_user, status='completed')
     total_exams = user_exams.count()
     last_exam = user_exams.first()
 
@@ -129,7 +187,7 @@ def dashboard_view(request):
         # Evolution charts - top biomarkers across all exams
         top_biomarkers = (
             ExamResult.objects
-            .filter(exam__user=request.user, exam__status='completed')
+            .filter(exam__user=effective_user, exam__status='completed')
             .values('biomarker__id', 'biomarker__name', 'biomarker__code',
                     'biomarker__unit', 'biomarker__category')
             .annotate(count=Count('id'))
@@ -139,7 +197,7 @@ def dashboard_view(request):
             results = (
                 ExamResult.objects
                 .filter(
-                    exam__user=request.user,
+                    exam__user=effective_user,
                     exam__status='completed',
                     biomarker_id=bm['biomarker__id'],
                 )
@@ -157,6 +215,15 @@ def dashboard_view(request):
                     'ref_max': [float(r.ref_max) if r.ref_max else None for r in results],
                 }
 
+    # Biomarker Correlation Analysis
+    correlation_data = None
+    if total_exams > 0 and last_exam:
+        from .correlations import analyze_correlations
+        gender = ''
+        if hasattr(effective_user, 'profile'):
+            gender = effective_user.profile.gender
+        correlation_data = analyze_correlations(last_results, gender)
+
     # Recent exams
     recent_exams = user_exams[:5]
 
@@ -171,6 +238,7 @@ def dashboard_view(request):
         'critical_biomarkers_json': json.dumps(critical_biomarkers),
         'analysis_data': analysis_data,
         'analysis_data_json': json.dumps(analysis_data),
+        'correlation_data': correlation_data,
         'recent_exams': recent_exams,
     }
     return render(request, 'core/dashboard.html', context)
@@ -179,30 +247,39 @@ def dashboard_view(request):
 @login_required
 def upload_view(request):
     """Upload a new blood exam."""
+    effective_user = get_effective_user(request)
     if request.method == 'POST':
         form = ExamUploadForm(request.POST, request.FILES)
         if form.is_valid():
             exam = form.save(commit=False)
-            exam.user = request.user
+            exam.user = effective_user
 
             # Detect file type
             ext = exam.file.name.lower().split('.')[-1]
             exam.file_type = 'pdf' if ext == 'pdf' else 'image'
             exam.save()
 
-            # Process exam (synchronous)
-            success = process_exam(exam)
-
-            if success:
-                messages.success(request, 'Exame processado com sucesso!')
-                return redirect('exam_detail', exam_id=exam.id)
-            else:
-                messages.warning(
-                    request,
-                    'O exame foi enviado mas houve um erro no processamento. '
-                    'Verifique os detalhes abaixo.'
+            # Auto-link active medications to this exam
+            active_meds = UserMedication.objects.filter(
+                user=effective_user, is_active=True
+            ).select_related('medication')
+            for um in active_meds:
+                ExamMedication.objects.create(
+                    exam=exam,
+                    medication=um.medication,
+                    dose=um.dose,
+                    frequency=um.frequency,
                 )
-                return redirect('exam_detail', exam_id=exam.id)
+
+            # Process exam in background thread
+            thread = threading.Thread(
+                target=_process_exam_in_thread,
+                args=(exam.id,),
+                daemon=True,
+            )
+            thread.start()
+
+            return redirect('exam_processing', exam_id=exam.id)
     else:
         form = ExamUploadForm()
 
@@ -210,9 +287,31 @@ def upload_view(request):
 
 
 @login_required
+def exam_processing_view(request, exam_id):
+    """Show processing status page with auto-polling."""
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
+    if exam.status in ('completed', 'error'):
+        return redirect('exam_detail', exam_id=exam.id)
+    return render(request, 'core/exam_processing.html', {'exam': exam})
+
+
+@login_required
+def exam_status_api(request, exam_id):
+    """JSON endpoint for polling exam processing status."""
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
+    return JsonResponse({
+        'status': exam.status,
+        'result_count': exam.results.count(),
+    })
+
+
+@login_required
 def exam_detail_view(request, exam_id):
     """View details of a single exam."""
-    exam = get_object_or_404(Exam, id=exam_id, user=request.user)
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
     results = exam.results.select_related('biomarker').order_by('biomarker__category', 'biomarker__name')
     analysis = getattr(exam, 'analysis', None)
 
@@ -228,7 +327,7 @@ def exam_detail_view(request, exam_id):
     history_comparison = {}
     previous_exam = (
         Exam.objects
-        .filter(user=request.user, status='completed', exam_date__lt=exam.exam_date)
+        .filter(user=effective_user, status='completed', exam_date__lt=exam.exam_date)
         .first()
     )
     if previous_exam:
@@ -246,12 +345,18 @@ def exam_detail_view(request, exam_id):
                     'pct': round(pct, 1),
                 }
 
+    # Medications linked to this exam
+    exam_medications = ExamMedication.objects.filter(
+        exam=exam
+    ).select_related('medication').order_by('medication__name')
+
     context = {
         'exam': exam,
         'grouped_results': grouped_results,
         'analysis': analysis,
         'history_comparison': history_comparison,
         'previous_exam': previous_exam,
+        'exam_medications': exam_medications,
     }
     return render(request, 'core/exam_detail.html', context)
 
@@ -259,7 +364,8 @@ def exam_detail_view(request, exam_id):
 @login_required
 def exam_history_view(request):
     """View all exams with timeline."""
-    exams = Exam.objects.filter(user=request.user).order_by('-exam_date')
+    effective_user = get_effective_user(request)
+    exams = Exam.objects.filter(user=effective_user).order_by('-exam_date')
 
     # Get biomarker comparison across exams
     comparison_data = {}
@@ -304,11 +410,12 @@ def exam_history_view(request):
 @login_required
 def biomarker_chart_view(request, code):
     """Detailed chart for a single biomarker over time."""
+    effective_user = get_effective_user(request)
     biomarker = get_object_or_404(Biomarker, code=code)
 
     results = (
         ExamResult.objects
-        .filter(exam__user=request.user, exam__status='completed', biomarker=biomarker)
+        .filter(exam__user=effective_user, exam__status='completed', biomarker=biomarker)
         .select_related('exam')
         .order_by('exam__exam_date')
     )
@@ -327,8 +434,8 @@ def biomarker_chart_view(request, code):
 
     # Get reference ranges for this user
     gender = ''
-    if hasattr(request.user, 'profile'):
-        gender = request.user.profile.gender
+    if hasattr(effective_user, 'profile'):
+        gender = effective_user.profile.gender
     ref_range = biomarker.get_ref_range(gender)
 
     # Trend analysis is loaded asynchronously via AJAX to avoid blocking page render
@@ -348,11 +455,12 @@ def biomarker_chart_view(request, code):
 @login_required
 def biomarker_trend_api(request, code):
     """AJAX endpoint: generate/return trend analysis for a biomarker."""
+    effective_user = get_effective_user(request)
     biomarker = get_object_or_404(Biomarker, code=code)
 
     results = (
         ExamResult.objects
-        .filter(exam__user=request.user, exam__status='completed', biomarker=biomarker)
+        .filter(exam__user=effective_user, exam__status='completed', biomarker=biomarker)
         .select_related('exam')
         .order_by('exam__exam_date')
     )
@@ -361,12 +469,12 @@ def biomarker_trend_api(request, code):
         return JsonResponse({'status': 'insufficient_data'})
 
     gender = ''
-    if hasattr(request.user, 'profile'):
-        gender = request.user.profile.gender
+    if hasattr(effective_user, 'profile'):
+        gender = effective_user.profile.gender
     ref_range = biomarker.get_ref_range(gender)
 
     analysis = generate_trend_analysis(
-        biomarker, results, ref_range[0], ref_range[1], request.user
+        biomarker, results, ref_range[0], ref_range[1], effective_user
     )
 
     if analysis:
@@ -380,8 +488,14 @@ def profile_view(request):
     if request.method == 'POST':
         form = ProfileForm(request.POST, instance=request.user.profile)
         if form.is_valid():
+            password_changed = bool(form.cleaned_data.get('new_password'))
             form.save()
-            messages.success(request, 'Perfil atualizado com sucesso!')
+            if password_changed:
+                # Keep user logged in after password change
+                update_session_auth_hash(request, request.user)
+                messages.success(request, 'Perfil e senha atualizados com sucesso!')
+            else:
+                messages.success(request, 'Perfil atualizado com sucesso!')
             return redirect('profile')
     else:
         form = ProfileForm(instance=request.user.profile)
@@ -392,7 +506,8 @@ def profile_view(request):
 @login_required
 def exam_delete_view(request, exam_id):
     """Delete an exam."""
-    exam = get_object_or_404(Exam, id=exam_id, user=request.user)
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
     if request.method == 'POST':
         exam.file.delete()
         exam.delete()
@@ -403,8 +518,9 @@ def exam_delete_view(request, exam_id):
 
 @login_required
 def exam_reprocess_view(request, exam_id):
-    """Reprocess an exam with AI."""
-    exam = get_object_or_404(Exam, id=exam_id, user=request.user)
+    """Reprocess an exam with AI (background)."""
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
     if request.method == 'POST':
         # Clear old results
         exam.results.all().delete()
@@ -414,11 +530,14 @@ def exam_reprocess_view(request, exam_id):
         exam.error_message = ''
         exam.save()
 
-        success = process_exam(exam)
-        if success:
-            messages.success(request, 'Exame reprocessado com sucesso!')
-        else:
-            messages.error(request, 'Erro ao reprocessar o exame.')
+        thread = threading.Thread(
+            target=_process_exam_in_thread,
+            args=(exam.id,),
+            daemon=True,
+        )
+        thread.start()
+
+        return redirect('exam_processing', exam_id=exam.id)
 
     return redirect('exam_detail', exam_id=exam_id)
 
@@ -428,10 +547,11 @@ def exam_reprocess_view(request, exam_id):
 @login_required
 def api_biomarker_data(request, code):
     """API endpoint returning biomarker history as JSON (for Chart.js)."""
+    effective_user = get_effective_user(request)
     biomarker = get_object_or_404(Biomarker, code=code)
     results = (
         ExamResult.objects
-        .filter(exam__user=request.user, exam__status='completed', biomarker=biomarker)
+        .filter(exam__user=effective_user, exam__status='completed', biomarker=biomarker)
         .select_related('exam')
         .order_by('exam__exam_date')
     )
@@ -448,11 +568,16 @@ def api_biomarker_data(request, code):
 
 # ---- Admin panel ----
 
-@user_passes_test(lambda u: u.is_superuser)
+def _is_superuser(u):
+    return u.is_superuser
+
+
+@user_passes_test(_is_superuser)
 def admin_users_view(request):
-    """User management for superusers."""
+    """User management list for superusers."""
     users = (
         User.objects
+        .select_related('profile')
         .annotate(exam_count=Count('exams'))
         .order_by('-date_joined')
     )
@@ -477,6 +602,231 @@ def admin_users_view(request):
 
     context = {'users': users}
     return render(request, 'core/admin_users.html', context)
+
+
+@user_passes_test(_is_superuser)
+def admin_user_create_view(request):
+    """Create a new user (admin panel)."""
+    if request.method == 'POST':
+        form = AdminUserForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            messages.success(request, f'Usuário {user.username} criado com sucesso.')
+            return redirect('admin_users')
+    else:
+        form = AdminUserForm()
+
+    return render(request, 'core/admin_user_form.html', {
+        'form': form,
+        'page_title': 'Novo Usu\u00e1rio',
+    })
+
+
+@user_passes_test(_is_superuser)
+def admin_user_edit_view(request, user_id):
+    """Edit an existing user (admin panel)."""
+    target_user = get_object_or_404(User, id=user_id)
+
+    if request.method == 'POST':
+        form = AdminUserForm(request.POST, editing_user=target_user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Usuário {target_user.username} atualizado.')
+            return redirect('admin_users')
+    else:
+        form = AdminUserForm(editing_user=target_user)
+
+    return render(request, 'core/admin_user_form.html', {
+        'form': form,
+        'editing_user': target_user,
+        'page_title': f'Editar: {target_user.username}',
+    })
+
+
+@user_passes_test(_is_superuser)
+def admin_user_delete_view(request, user_id):
+    """Delete a user (admin panel). POST only."""
+    target_user = get_object_or_404(User, id=user_id)
+
+    if target_user.is_superuser:
+        messages.error(request, 'Não é possível excluir um administrador.')
+        return redirect('admin_users')
+
+    if request.method == 'POST':
+        username = target_user.username
+        target_user.delete()
+        messages.success(request, f'Usuário {username} excluído.')
+
+    return redirect('admin_users')
+
+
+@user_passes_test(_is_superuser)
+def admin_view_as_user(request, user_id):
+    """Start impersonating a user (admin only)."""
+    target = get_object_or_404(User, id=user_id)
+    request.session['_impersonate_user_id'] = target.id
+    name = target.get_full_name() or target.username
+    messages.info(request, f'Visualizando como {name}.')
+    return redirect('dashboard')
+
+
+@user_passes_test(_is_superuser)
+def admin_stop_impersonation(request):
+    """Stop impersonating and return to admin panel."""
+    request.session.pop('_impersonate_user_id', None)
+    return redirect('admin_users')
+
+
+# ---- Medication management ----
+
+@login_required
+def medications_view(request):
+    """List user medications with active/inactive tabs."""
+    effective_user = get_effective_user(request)
+    active_meds = UserMedication.objects.filter(
+        user=effective_user, is_active=True
+    ).select_related('medication')
+    inactive_meds = UserMedication.objects.filter(
+        user=effective_user, is_active=False
+    ).select_related('medication')
+
+    context = {
+        'active_meds': active_meds,
+        'inactive_meds': inactive_meds,
+    }
+    return render(request, 'core/medications.html', context)
+
+
+@login_required
+def medication_add_view(request):
+    """Add a new medication."""
+    effective_user = get_effective_user(request)
+    if request.method == 'POST':
+        form = UserMedicationForm(request.POST)
+        if form.is_valid():
+            med = form.save(commit=False)
+            med.user = effective_user
+            med.save()
+            messages.success(request, f'{med.medication.name} adicionado com sucesso.')
+            return redirect('medications')
+    else:
+        form = UserMedicationForm()
+
+    return render(request, 'core/medication_form.html', {
+        'form': form,
+        'page_title': 'Adicionar Medicamento',
+    })
+
+
+@login_required
+def medication_edit_view(request, med_id):
+    """Edit an existing medication."""
+    effective_user = get_effective_user(request)
+    user_med = get_object_or_404(UserMedication, id=med_id, user=effective_user)
+
+    if request.method == 'POST':
+        form = UserMedicationForm(request.POST, instance=user_med)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'{user_med.medication.name} atualizado.')
+            return redirect('medications')
+    else:
+        form = UserMedicationForm(instance=user_med)
+
+    return render(request, 'core/medication_form.html', {
+        'form': form,
+        'page_title': f'Editar: {user_med.medication.name}',
+        'editing': True,
+    })
+
+
+@login_required
+def medication_toggle_view(request, med_id):
+    """Toggle medication active/inactive status."""
+    effective_user = get_effective_user(request)
+    user_med = get_object_or_404(UserMedication, id=med_id, user=effective_user)
+
+    if request.method == 'POST':
+        user_med.is_active = not user_med.is_active
+        if not user_med.is_active and not user_med.end_date:
+            from datetime import date
+            user_med.end_date = date.today()
+        user_med.save()
+        status = 'reativado' if user_med.is_active else 'desativado'
+        messages.success(request, f'{user_med.medication.name} {status}.')
+
+    return redirect('medications')
+
+
+@login_required
+def medication_delete_view(request, med_id):
+    """Delete a medication."""
+    effective_user = get_effective_user(request)
+    user_med = get_object_or_404(UserMedication, id=med_id, user=effective_user)
+
+    if request.method == 'POST':
+        name = user_med.medication.name
+        user_med.delete()
+        messages.success(request, f'{name} removido.')
+
+    return redirect('medications')
+
+
+@login_required
+def exam_medications_view(request, exam_id):
+    """Manage medications linked to a specific exam."""
+    effective_user = get_effective_user(request)
+    exam = get_object_or_404(Exam, id=exam_id, user=effective_user)
+
+    if request.method == 'POST':
+        # Clear existing exam medications and re-create from form
+        ExamMedication.objects.filter(exam=exam).delete()
+        selected_ids = request.POST.getlist('medications')
+        for um_id in selected_ids:
+            try:
+                user_med = UserMedication.objects.select_related('medication').get(
+                    id=um_id, user=effective_user
+                )
+                ExamMedication.objects.create(
+                    exam=exam,
+                    medication=user_med.medication,
+                    dose=user_med.dose,
+                    frequency=user_med.frequency,
+                )
+            except UserMedication.DoesNotExist:
+                continue
+        messages.success(request, 'Medicamentos do exame atualizados.')
+        return redirect('exam_detail', exam_id=exam.id)
+
+    # Get all user medications that were active around the exam date
+    all_user_meds = UserMedication.objects.filter(
+        user=effective_user
+    ).select_related('medication').order_by('medication__name')
+
+    # Pre-select: medications already linked to this exam
+    linked_med_ids = set(
+        ExamMedication.objects.filter(exam=exam).values_list('medication_id', flat=True)
+    )
+
+    # Build list with pre-selection info
+    med_list = []
+    for um in all_user_meds:
+        was_active = um.is_active or (
+            um.start_date <= exam.exam_date and
+            (um.end_date is None or um.end_date >= exam.exam_date)
+        )
+        med_list.append({
+            'user_med': um,
+            'checked': um.medication_id in linked_med_ids,
+            'was_active': was_active,
+        })
+
+    context = {
+        'exam': exam,
+        'med_list': med_list,
+        'has_linked': bool(linked_med_ids),
+    }
+    return render(request, 'core/exam_medications.html', context)
 
 
 def health_view(request):

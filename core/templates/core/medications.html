@@ -1,0 +1,107 @@
+{% extends "core/base.html" %}
+
+{% block title %}Meus Medicamentos - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Meus Medicamentos</h1>
+    <div class="page-actions">
+        <a href="{% url 'medication_add' %}" class="btn btn-primary">+ Adicionar</a>
+    </div>
+</div>
+
+{% if not active_meds and not inactive_meds %}
+<div class="empty-state">
+    <div class="empty-icon">&#x1F48A;</div>
+    <h2>Nenhum medicamento cadastrado</h2>
+    <p>Cadastre os medicamentos, vitaminas e suplementos que voc&ecirc; toma para manter um hist&oacute;rico junto aos seus exames.</p>
+    <a href="{% url 'medication_add' %}" class="btn btn-primary">Adicionar Medicamento</a>
+</div>
+{% else %}
+
+<!-- Active Medications -->
+{% if active_meds %}
+<div class="section">
+    <h2 class="section-title">Ativos ({{ active_meds|length }})</h2>
+    <div class="med-grid">
+        {% for um in active_meds %}
+        <div class="med-card med-active">
+            <div class="med-card-header">
+                <span class="med-type-badge med-type-{{ um.medication.type }}">{{ um.medication.get_type_display }}</span>
+                <span class="med-status-dot active" title="Ativo"></span>
+            </div>
+            <h3 class="med-name">{{ um.medication.name }}</h3>
+            <div class="med-details">
+                <div class="med-detail">
+                    <span class="med-label">Dose</span>
+                    <span class="med-value">{{ um.dose }}</span>
+                </div>
+                <div class="med-detail">
+                    <span class="med-label">Frequ&ecirc;ncia</span>
+                    <span class="med-value">{{ um.get_frequency_display }}</span>
+                </div>
+                <div class="med-detail">
+                    <span class="med-label">In&iacute;cio</span>
+                    <span class="med-value">{{ um.start_date|date:"d/m/Y" }}</span>
+                </div>
+            </div>
+            {% if um.notes %}
+            <p class="med-notes">{{ um.notes }}</p>
+            {% endif %}
+            <div class="med-actions">
+                <a href="{% url 'medication_edit' um.id %}" class="btn btn-sm btn-outline">Editar</a>
+                <form method="post" action="{% url 'medication_toggle' um.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-muted">Desativar</button>
+                </form>
+                <form method="post" action="{% url 'medication_delete' um.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remover {{ um.medication.name }}?')">Excluir</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Inactive Medications -->
+{% if inactive_meds %}
+<div class="section">
+    <h2 class="section-title">Inativos ({{ inactive_meds|length }})</h2>
+    <div class="med-grid">
+        {% for um in inactive_meds %}
+        <div class="med-card med-inactive">
+            <div class="med-card-header">
+                <span class="med-type-badge med-type-{{ um.medication.type }}">{{ um.medication.get_type_display }}</span>
+                <span class="med-status-dot inactive" title="Inativo"></span>
+            </div>
+            <h3 class="med-name">{{ um.medication.name }}</h3>
+            <div class="med-details">
+                <div class="med-detail">
+                    <span class="med-label">Dose</span>
+                    <span class="med-value">{{ um.dose }}</span>
+                </div>
+                <div class="med-detail">
+                    <span class="med-label">Per&iacute;odo</span>
+                    <span class="med-value">{{ um.start_date|date:"d/m/Y" }} - {{ um.end_date|date:"d/m/Y"|default:"?" }}</span>
+                </div>
+            </div>
+            <div class="med-actions">
+                <form method="post" action="{% url 'medication_toggle' um.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline">Reativar</button>
+                </form>
+                <form method="post" action="{% url 'medication_delete' um.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remover {{ um.medication.name }}?')">Excluir</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "core/base.html" %}
+
+{% block title %}Medicamentos do Exame - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="{% url 'exam_detail' exam.id %}" class="back-link">&larr; Voltar ao Exame</a>
+        <h1>Medicamentos - Exame {{ exam.exam_date|date:"d/m/Y" }}</h1>
+        <p class="page-subtitle">Selecione os medicamentos que voc&ecirc; estava tomando na data deste exame.</p>
+    </div>
+</div>
+
+<div class="form-container">
+    <form method="post">
+        {% csrf_token %}
+
+        {% if not med_list %}
+        <div class="empty-state-small">
+            <p>Voc&ecirc; ainda n&atilde;o cadastrou nenhum medicamento.</p>
+            <a href="{% url 'medication_add' %}" class="btn btn-outline">Cadastrar Medicamento</a>
+        </div>
+        {% else %}
+
+        <div class="exam-med-list">
+            {% for item in med_list %}
+            <label class="exam-med-item {% if item.was_active %}was-active{% endif %} {% if not item.was_active %}was-inactive{% endif %}">
+                <input type="checkbox" name="medications" value="{{ item.user_med.id }}"
+                    {% if item.checked %}checked{% endif %}>
+                <div class="exam-med-info">
+                    <strong>{{ item.user_med.medication.name }}</strong>
+                    <span class="med-type-badge med-type-{{ item.user_med.medication.type }}">{{ item.user_med.medication.get_type_display }}</span>
+                    <div class="exam-med-dose">
+                        {{ item.user_med.dose }} &bull; {{ item.user_med.get_frequency_display }}
+                    </div>
+                    {% if not item.was_active %}
+                    <span class="exam-med-note">N&atilde;o estava ativo na data do exame</span>
+                    {% endif %}
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">Salvar</button>
+            <a href="{% url 'exam_detail' exam.id %}" class="btn btn-outline btn-lg">Cancelar</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

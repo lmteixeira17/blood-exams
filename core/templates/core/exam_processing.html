@@ -1,0 +1,128 @@
+{% extends "core/base.html" %}
+
+{% block title %}Processando Exame - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="processing-container">
+    <div class="processing-card">
+        <div class="processing-icon">
+            <div class="processing-spinner"></div>
+        </div>
+        <h1 class="processing-title">Processando seu exame</h1>
+        <p class="processing-subtitle">
+            Nossa IA est&aacute; analisando o exame de <strong>{{ exam.exam_date|date:"d/m/Y" }}</strong>
+        </p>
+
+        <div class="processing-steps">
+            <div class="processing-step" id="step-upload">
+                <span class="step-icon step-done">&#x2705;</span>
+                <span class="step-text">Arquivo enviado com sucesso</span>
+            </div>
+            <div class="processing-step" id="step-extract">
+                <span class="step-icon step-active"><span class="spinner-sm"></span></span>
+                <span class="step-text">Extraindo biomarcadores com GPT-4 Vision...</span>
+            </div>
+            <div class="processing-step" id="step-validate">
+                <span class="step-icon step-pending">&#x23F3;</span>
+                <span class="step-text">Validando e corrigindo dados</span>
+            </div>
+            <div class="processing-step" id="step-analysis">
+                <span class="step-icon step-pending">&#x23F3;</span>
+                <span class="step-text">Gerando an&aacute;lise com IA</span>
+            </div>
+        </div>
+
+        <div class="processing-counter" id="counterSection" style="display:none">
+            <span class="counter-number" id="resultCount">0</span>
+            <span class="counter-label">biomarcadores encontrados</span>
+        </div>
+
+        <p class="processing-note">
+            Este processo leva de 1 a 3 minutos dependendo do tamanho do exame.
+            <br>Voc&ecirc; pode sair desta p&aacute;gina &mdash; o processamento continua em segundo plano.
+        </p>
+
+        <a href="{% url 'dashboard' %}" class="btn btn-outline btn-sm">Voltar ao Dashboard</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    var examId = {{ exam.id }};
+    var pollUrl = '{% url "exam_status_api" exam.id %}';
+    var detailUrl = '{% url "exam_detail" exam.id %}';
+    var lastCount = 0;
+
+    function updateSteps(data) {
+        var count = data.result_count || 0;
+        var status = data.status;
+
+        if (count > 0) {
+            document.getElementById('counterSection').style.display = '';
+            document.getElementById('resultCount').textContent = count;
+        }
+
+        if (count > 0) {
+            setStep('step-extract', 'done');
+            setStep('step-validate', 'active');
+        }
+
+        if (status === 'completed') {
+            setStep('step-extract', 'done');
+            setStep('step-validate', 'done');
+            setStep('step-analysis', 'done');
+            setTimeout(function() {
+                window.location.href = detailUrl;
+            }, 1000);
+            return true;
+        }
+
+        if (status === 'error') {
+            window.location.href = detailUrl;
+            return true;
+        }
+
+        lastCount = count;
+        return false;
+    }
+
+    function setStep(stepId, state) {
+        var el = document.getElementById(stepId);
+        if (!el) return;
+        var icon = el.querySelector('.step-icon');
+        icon.className = 'step-icon step-' + state;
+        if (state === 'done') {
+            icon.innerHTML = '&#x2705;';
+        } else if (state === 'active') {
+            icon.innerHTML = '<span class="spinner-sm"></span>';
+        } else {
+            icon.innerHTML = '&#x23F3;';
+        }
+    }
+
+    function poll() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', pollUrl);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                var done = updateSteps(data);
+                if (!done) {
+                    setTimeout(poll, 3000);
+                }
+            } else {
+                setTimeout(poll, 5000);
+            }
+        };
+        xhr.onerror = function() {
+            setTimeout(poll, 5000);
+        };
+        xhr.send();
+    }
+
+    setTimeout(poll, 2000);
+})();
+</script>
+{% endblock %}

@@ -16,7 +16,7 @@ function getCSSVar(name) {
 function initTheme() {
     var saved = localStorage.getItem('blood-lab-theme');
     if (!saved) {
-        saved = 'dark';
+        saved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
     document.documentElement.setAttribute('data-theme', saved);
 }
@@ -631,7 +631,7 @@ function drawGauge(canvas, bm) {
     var h = canvas.height;
     var cx = w / 2;
     var cy = h - 10;
-    var radius = 70;
+    var radius = Math.min(70, (w / 2) - 20);
     var startAngle = Math.PI;
     var endAngle = 2 * Math.PI;
 
@@ -1056,7 +1056,7 @@ function addCompareCheckboxes() {
         var check = document.createElement('div');
         check.className = 'chart-card-compare-check';
         check.setAttribute('data-code', code);
-        check.innerHTML = '&#10003;';
+        check.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
         if (_compareSelected[code]) {
             check.classList.add('checked');
             card.classList.add('compare-selected');
@@ -1068,7 +1068,27 @@ function addCompareCheckboxes() {
                 toggleCompareItem(c, cd, chk);
             };
         })(code, card, check));
+
         card.appendChild(check);
+    }
+
+    // Delegated handler: click anywhere on card toggles selection in compare mode
+    var grid = document.getElementById('chartsGrid');
+    if (grid && !grid._compareClickBound) {
+        grid._compareClickBound = true;
+        grid.addEventListener('click', function(e) {
+            if (!_compareMode) return;
+            var card = e.target.closest('.chart-card');
+            if (!card) return;
+            var code = card.getAttribute('data-biomarker-code');
+            if (!code) return;
+            // Don't double-fire if checkbox itself was clicked
+            if (e.target.closest('.chart-card-compare-check')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            var chk = card.querySelector('.chart-card-compare-check[data-code="' + code + '"]');
+            if (chk) toggleCompareItem(code, card, chk);
+        });
     }
 }
 
@@ -1451,3 +1471,69 @@ function hideComparison() {
         _compareChart = null;
     }
 }
+
+/* ===== Mobile Navigation ===== */
+
+function initMobileNav() {
+    var hamburger = document.getElementById('navHamburger');
+    var navLinks = document.getElementById('navLinks');
+    var overlay = document.getElementById('navOverlay');
+
+    if (!hamburger || !navLinks) return;
+
+    // Clone nav-user links into mobile drawer
+    var navUser = document.querySelector('.nav-user');
+    if (navUser) {
+        var separator = document.createElement('div');
+        separator.className = 'nav-mobile-separator';
+
+        var userLinks = navUser.querySelectorAll('.nav-link');
+        for (var i = 0; i < userLinks.length; i++) {
+            var clone = userLinks[i].cloneNode(true);
+            separator.appendChild(clone);
+        }
+        navLinks.appendChild(separator);
+    }
+
+    function openMobileNav() {
+        navLinks.classList.add('open');
+        hamburger.classList.add('active');
+        hamburger.setAttribute('aria-expanded', 'true');
+        if (overlay) overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileNav() {
+        navLinks.classList.remove('open');
+        hamburger.classList.remove('active');
+        hamburger.setAttribute('aria-expanded', 'false');
+        if (overlay) overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    hamburger.addEventListener('click', function() {
+        if (navLinks.classList.contains('open')) {
+            closeMobileNav();
+        } else {
+            openMobileNav();
+        }
+    });
+
+    if (overlay) {
+        overlay.addEventListener('click', closeMobileNav);
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+            closeMobileNav();
+        }
+    });
+
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768 && navLinks.classList.contains('open')) {
+            closeMobileNav();
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initMobileNav);

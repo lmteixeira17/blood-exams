@@ -1,50 +1,51 @@
 {% extends "core/base.html" %}
 
-{% block title %}Gerenciar Usuários - Blood Lab{% endblock %}
+{% block title %}Gerenciar Usu&aacute;rios - Blood Lab{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Gerenciar Usuários</h1>
+    <h1>Gerenciar Usu&aacute;rios</h1>
+    <a href="{% url 'admin_user_create' %}" class="btn btn-primary">+ Novo Usu&aacute;rio</a>
 </div>
 
 <div class="section">
     <div class="results-table-wrapper">
-        <table class="results-table">
+        <table class="results-table admin-table-mobile">
             <thead>
                 <tr>
-                    <th>Usuário</th>
+                    <th>Usu&aacute;rio</th>
                     <th>Nome</th>
                     <th>E-mail</th>
+                    <th>Sexo</th>
                     <th>Exames</th>
                     <th>Cadastro</th>
-                    <th>Ativo</th>
-                    <th>Assinante</th>
-                    <th>Ações</th>
+                    <th>Status</th>
+                    <th>A&ccedil;&otilde;es</th>
                 </tr>
             </thead>
             <tbody>
                 {% for u in users %}
                 <tr>
-                    <td><strong>{{ u.username }}</strong></td>
-                    <td>{{ u.get_full_name|default:"-" }}</td>
-                    <td>{{ u.email|default:"-" }}</td>
-                    <td>{{ u.exam_count }}</td>
-                    <td>{{ u.date_joined|date:"d/m/Y" }}</td>
-                    <td>
+                    <td data-label="Usuário">
+                        <strong>{{ u.username }}</strong>
+                        {% if u.is_superuser %}<span class="badge badge-info" style="margin-left:4px;">Admin</span>{% endif %}
+                    </td>
+                    <td data-label="Nome">{{ u.get_full_name|default:"-" }}</td>
+                    <td data-label="E-mail">{{ u.email|default:"-" }}</td>
+                    <td data-label="Sexo">{{ u.profile.get_gender_display|default:"-" }}</td>
+                    <td data-label="Exames">{{ u.exam_count }}</td>
+                    <td data-label="Cadastro">{{ u.date_joined|date:"d/m/Y" }}</td>
+                    <td data-label="Status">
                         {% if u.is_active %}
-                            <span class="badge badge-success">Sim</span>
+                            <span class="badge badge-success">Ativo</span>
                         {% else %}
-                            <span class="badge badge-warning">Não</span>
+                            <span class="badge badge-warning">Inativo</span>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if u.profile.is_active_subscriber %}
-                            <span class="badge badge-success">Sim</span>
-                        {% else %}
-                            <span class="badge badge-warning">Não</span>
-                        {% endif %}
-                    </td>
-                    <td>
+                    <td class="actions-cell">
+                        <a href="{% url 'admin_view_as' u.id %}" class="btn btn-sm btn-primary">Ver dados</a>
+                        <a href="{% url 'admin_user_edit' u.id %}" class="btn btn-sm btn-outline">Editar</a>
+
                         {% if not u.is_superuser %}
                         <form method="post" style="display:inline">
                             {% csrf_token %}
@@ -54,16 +55,12 @@
                                 {% if u.is_active %}Desativar{% else %}Ativar{% endif %}
                             </button>
                         </form>
-                        <form method="post" style="display:inline">
+                        <form method="post" action="{% url 'admin_user_delete' u.id %}"
+                              style="display:inline"
+                              onsubmit="return confirm('Excluir usu\u00e1rio {{ u.username }}? Todos os exames ser\u00e3o apagados.');">
                             {% csrf_token %}
-                            <input type="hidden" name="user_id" value="{{ u.id }}">
-                            <input type="hidden" name="action" value="toggle_subscriber">
-                            <button type="submit" class="btn btn-sm btn-outline">
-                                {% if u.profile.is_active_subscriber %}Cancelar Assin.{% else %}Ativar Assin.{% endif %}
-                            </button>
+                            <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                         </form>
-                        {% else %}
-                        <span class="badge">Admin</span>
                         {% endif %}
                     </td>
                 </tr>

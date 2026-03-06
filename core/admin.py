@@ -6,7 +6,8 @@ from django.contrib import admin
 
 from .models import (
     AIAnalysis, Biomarker, BiomarkerTrendAnalysis, Exam,
-    ExamResult, ExamValidation, UserProfile,
+    ExamMedication, ExamResult, ExamValidation, Medication,
+    UserMedication, UserProfile,
 )
 
 
@@ -60,3 +61,24 @@ class BiomarkerTrendAnalysisAdmin(admin.ModelAdmin):
     list_filter = ['model_used']
     search_fields = ['biomarker__name', 'user__username']
     readonly_fields = ['input_tokens', 'output_tokens']
+
+
+@admin.register(Medication)
+class MedicationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'type', 'common_doses']
+    list_filter = ['type']
+    search_fields = ['name', 'description']
+    ordering = ['name']
+
+
+@admin.register(UserMedication)
+class UserMedicationAdmin(admin.ModelAdmin):
+    list_display = ['user', 'medication', 'dose', 'frequency', 'is_active', 'start_date']
+    list_filter = ['is_active', 'frequency']
+    search_fields = ['medication__name', 'user__username']
+
+
+@admin.register(ExamMedication)
+class ExamMedicationAdmin(admin.ModelAdmin):
+    list_display = ['exam', 'medication', 'dose', 'frequency']
+    search_fields = ['medication__name', 'exam__user__username']

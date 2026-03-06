@@ -1,4 +1,5 @@
 {% load static %}
+{% load blood_extras %}
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -17,10 +18,16 @@
                 <span>Blood Lab</span>
             </a>
             {% if user.is_authenticated %}
-            <div class="nav-links">
+            <button class="nav-hamburger" id="navHamburger" aria-label="Menu" aria-expanded="false">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+            <div class="nav-links" id="navLinks">
                 <a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
                 <a href="{% url 'upload' %}" class="nav-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}">Enviar Exame</a>
                 <a href="{% url 'exam_history' %}" class="nav-link {% if request.resolver_match.url_name == 'exam_history' %}active{% endif %}">Histórico</a>
+                <a href="{% url 'medications' %}" class="nav-link {% if request.resolver_match.url_name == 'medications' or request.resolver_match.url_name == 'medication_add' or request.resolver_match.url_name == 'medication_edit' %}active{% endif %}">Medicamentos</a>
                 {% if user.is_superuser %}
                 <a href="{% url 'admin_users' %}" class="nav-link {% if request.resolver_match.url_name == 'admin_users' %}active{% endif %}">Usuários</a>
                 {% endif %}
@@ -32,6 +39,15 @@
             {% endif %}
         </div>
     </nav>
+    <div class="nav-overlay" id="navOverlay"></div>
+
+    {% get_impersonated_user as imp_user %}
+    {% if imp_user %}
+    <div class="impersonate-banner">
+        <span>Visualizando como: <strong>{{ imp_user.get_full_name|default:imp_user.username }}</strong></span>
+        <a href="{% url 'admin_stop_impersonation' %}" class="btn btn-sm btn-impersonate-back">Voltar ao Admin</a>
+    </div>
+    {% endif %}
 
     {% if messages %}
     <div class="messages-container">

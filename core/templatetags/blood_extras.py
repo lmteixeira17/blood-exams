@@ -1,10 +1,25 @@
 """
-Custom template filters for blood exams.
+Custom template filters and tags for blood exams.
 """
 
 from django import template
+from django.contrib.auth.models import User
 
 register = template.Library()
+
+
+@register.simple_tag(takes_context=True)
+def get_impersonated_user(context):
+    """Return the impersonated User object, or None."""
+    request = context.get('request')
+    if request and hasattr(request, 'user') and request.user.is_superuser:
+        uid = request.session.get('_impersonate_user_id')
+        if uid:
+            try:
+                return User.objects.get(id=uid)
+            except User.DoesNotExist:
+                pass
+    return None
 
 
 @register.filter

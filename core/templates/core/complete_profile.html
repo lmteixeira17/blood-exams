@@ -1,0 +1,62 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Completar Perfil - Blood Lab</title>
+    <link rel="stylesheet" href="{% static 'core/style.css' %}">
+    <script>
+    (function(){var s=localStorage.getItem('blood-lab-theme');if(!s){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',s);})();
+    </script>
+</head>
+<body class="auth-body">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <span class="auth-icon">&#129656;</span>
+                <h1>Completar Perfil</h1>
+                <p>Para analisar seus exames corretamente, precisamos de algumas informa&ccedil;&otilde;es.</p>
+            </div>
+
+            {% if form.errors %}
+            <div class="alert alert-error">
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label for="id_date_of_birth">Data de Nascimento *</label>
+                    <input type="text" name="date_of_birth" id="id_date_of_birth"
+                           placeholder="dd/mm/aaaa" maxlength="10" class="date-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_gender">Sexo *</label>
+                    <select name="gender" id="id_gender" required>
+                        <option value="">Selecione...</option>
+                        <option value="M">Masculino</option>
+                        <option value="F">Feminino</option>
+                    </select>
+                </div>
+
+                <p class="complete-profile-hint">
+                    As faixas de refer&ecirc;ncia dos biomarcadores variam conforme sexo e idade.
+                    Esses dados s&atilde;o essenciais para uma an&aacute;lise precisa.
+                </p>
+
+                <button type="submit" class="btn btn-primary btn-full">Continuar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="{% static 'core/app.js' %}"></script>
+</body>
+</html>

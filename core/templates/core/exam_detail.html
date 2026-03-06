@@ -144,6 +144,35 @@
 </div>
 {% endif %}
 
+<!-- Medications at time of exam -->
+{% if exam_medications %}
+<div class="section">
+    <div class="section-header-row">
+        <h2 class="section-title" style="border:none;margin:0;padding:0;">Medicamentos na Data do Exame</h2>
+        <a href="{% url 'exam_medications' exam.id %}" class="btn btn-sm btn-outline">Editar</a>
+    </div>
+    <div class="exam-med-chips">
+        {% for em in exam_medications %}
+        <div class="med-chip">
+            <span class="med-chip-icon med-type-{{ em.medication.type }}"></span>
+            <div>
+                <strong>{{ em.medication.name }}</strong>
+                <span class="med-chip-dose">{{ em.dose }} &bull; {{ em.get_frequency_display }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="section">
+    <div class="section-header-row">
+        <h2 class="section-title" style="border:none;margin:0;padding:0;">Medicamentos na Data do Exame</h2>
+        <a href="{% url 'exam_medications' exam.id %}" class="btn btn-sm btn-outline">Adicionar</a>
+    </div>
+    <p class="text-muted">Nenhum medicamento vinculado a este exame. <a href="{% url 'exam_medications' exam.id %}">Clique aqui</a> para adicionar.</p>
+</div>
+{% endif %}
+
 <!-- Results Table -->
 <div class="section">
     <h2 class="section-title">Resultados</h2>
@@ -152,7 +181,7 @@
     <div class="results-category">
         <h3 class="category-title">{{ category }}</h3>
         <div class="results-table-wrapper">
-            <table class="results-table">
+            <table class="results-table results-table-mobile">
                 <thead>
                     <tr>
                         <th></th>
@@ -183,12 +212,12 @@
                             {% endif %}
                             {% endwith %}
                         </td>
-                        <td><strong>{{ r.biomarker.name }}</strong></td>
-                        <td class="value-cell {% if r.is_abnormal %}value-abnormal{% endif %}">
+                        <td data-label="Biomarcador"><strong>{{ r.biomarker.name }}</strong></td>
+                        <td data-label="Valor" class="value-cell {% if r.is_abnormal %}value-abnormal{% endif %}">
                             {{ r.value }}
                         </td>
-                        <td>{{ r.biomarker.unit }}</td>
-                        <td class="ref-cell">
+                        <td data-label="Unidade">{{ r.biomarker.unit }}</td>
+                        <td data-label="Refer&ecirc;ncia" class="ref-cell">
                             {% if r.ref_min is not None and r.ref_max is not None %}
                                 {{ r.ref_min }} - {{ r.ref_max }}
                             {% elif r.ref_max is not None %}
@@ -199,7 +228,7 @@
                                 -
                             {% endif %}
                         </td>
-                        <td>
+                        <td data-label="Status">
                             {% if r.is_abnormal %}
                                 <span class="badge badge-warning">Alterado</span>
                             {% else %}
@@ -207,7 +236,7 @@
                             {% endif %}
                         </td>
                         {% if previous_exam %}
-                        <td class="comparison-cell">
+                        <td data-label="Anterior" class="comparison-cell">
                             {% with comp=history_comparison|get_item:r.biomarker_id %}
                             {% if comp %}
                                 <span class="comparison-value">{{ comp.previous_value }}</span>
@@ -220,8 +249,8 @@
                             {% endwith %}
                         </td>
                         {% endif %}
-                        <td>
-                            <a href="{% url 'biomarker_chart' r.biomarker.code %}" class="btn-icon" title="Ver gráfico">
+                        <td class="actions-cell">
+                            <a href="{% url 'biomarker_chart' r.biomarker.code %}" class="btn-icon" title="Ver gr&aacute;fico">
                                 📊
                             </a>
                         </td>

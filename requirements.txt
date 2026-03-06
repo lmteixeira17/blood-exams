@@ -11,5 +11,8 @@ openai>=1.0
 pdf2image>=1.16
 Pillow>=10.0
 
+# Auth
+django-allauth[socialaccount]>=0.57
+
 # Security
 bleach>=6.0

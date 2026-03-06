@@ -367,6 +367,7 @@ class ExamValidation(models.Model):
         ('historical', 'Consistência Histórica'),
         ('low_confidence', 'Baixa Confiança IA'),
         ('unmatched', 'Biomarcador Não Identificado'),
+        ('unit_mismatch', 'Unidade Incompatível'),
     ]
 
     exam = models.ForeignKey(
@@ -444,3 +445,146 @@ class BiomarkerTrendAnalysis(models.Model):
 
     def __str__(self):
         return f"Tendência {self.biomarker.name} - {self.user.username}"
+
+
+class Medication(models.Model):
+    """Catalog of medications, vitamins, and supplements."""
+
+    TYPE_CHOICES = [
+        ('medication', 'Medicamento'),
+        ('vitamin', 'Vitamina'),
+        ('supplement', 'Suplemento'),
+        ('hormone', 'Hormônio'),
+        ('other', 'Outro'),
+    ]
+
+    name = models.CharField(
+        max_length=200, unique=True,
+        verbose_name='Nome',
+        help_text='Ex: Vitamina D3, Levotiroxina, Creatina'
+    )
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, default='medication',
+        verbose_name='Tipo'
+    )
+    common_doses = models.CharField(
+        max_length=300, blank=True,
+        verbose_name='Doses Comuns',
+        help_text='Ex: 1000 UI, 50 mcg, 5 mg'
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name='Descrição',
+        help_text='Informações relevantes sobre o medicamento'
+    )
+    affects_biomarkers = models.TextField(
+        blank=True,
+        verbose_name='Biomarcadores Afetados',
+        help_text='Lista de biomarcadores que podem ser afetados'
+    )
+
+    class Meta:
+        verbose_name = 'Medicamento'
+        verbose_name_plural = 'Medicamentos'
+        ordering = ['type', 'name']
+        indexes = [
+            models.Index(fields=['type']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_type_display()})"
+
+
+class UserMedication(models.Model):
+    """Medications a user is currently taking."""
+
+    FREQUENCY_CHOICES = [
+        ('daily', 'Diário'),
+        ('twice_daily', '2x ao dia'),
+        ('three_daily', '3x ao dia'),
+        ('weekly', 'Semanal'),
+        ('twice_weekly', '2x por semana'),
+        ('three_weekly', '3x por semana'),
+        ('biweekly', 'Quinzenal'),
+        ('monthly', 'Mensal'),
+        ('as_needed', 'Quando necessário'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='medications',
+        verbose_name='Usuário'
+    )
+    medication = models.ForeignKey(
+        Medication, on_delete=models.CASCADE,
+        verbose_name='Medicamento'
+    )
+    dose = models.CharField(
+        max_length=100,
+        verbose_name='Dose',
+        help_text='Ex: 1000 UI, 50 mcg, 1 comprimido'
+    )
+    frequency = models.CharField(
+        max_length=20, choices=FREQUENCY_CHOICES,
+        verbose_name='Frequência'
+    )
+    start_date = models.DateField(
+        verbose_name='Início',
+        help_text='Data em que começou a tomar'
+    )
+    end_date = models.DateField(
+        null=True, blank=True,
+        verbose_name='Fim',
+        help_text='Deixe em branco se ainda está tomando'
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Observações',
+        help_text='Ex: tomar em jejum, com refeição, etc.'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Ativo'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Medicamento do Usuário'
+        verbose_name_plural = 'Medicamentos do Usuário'
+        ordering = ['-is_active', 'medication__name']
+        indexes = [
+            models.Index(fields=['user', 'is_active']),
+        ]
+
+    def __str__(self):
+        status = 'ativo' if self.is_active else 'inativo'
+        return f"{self.medication.name} - {self.dose} ({status})"
+
+
+class ExamMedication(models.Model):
+    """Snapshot of medications the user was taking at the time of an exam."""
+
+    exam = models.ForeignKey(
+        Exam, on_delete=models.CASCADE, related_name='medications',
+        verbose_name='Exame'
+    )
+    medication = models.ForeignKey(
+        Medication, on_delete=models.CASCADE,
+        verbose_name='Medicamento'
+    )
+    dose = models.CharField(
+        max_length=100,
+        verbose_name='Dose'
+    )
+    frequency = models.CharField(
+        max_length=20, choices=UserMedication.FREQUENCY_CHOICES,
+        verbose_name='Frequência'
+    )
+
+    class Meta:
+        verbose_name = 'Medicamento do Exame'
+        verbose_name_plural = 'Medicamentos do Exame'
+        unique_together = ['exam', 'medication']
+        ordering = ['medication__name']
+
+    def __str__(self):
+        return f"{self.medication.name} - {self.dose}"

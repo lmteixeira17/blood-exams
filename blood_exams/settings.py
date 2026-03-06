@@ -30,7 +30,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
     'core',
+]
+
+SITE_ID = 1
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 MIDDLEWARE = [
@@ -42,6 +54,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+    'core.middleware.ProfileCompletionMiddleware',
 ]
 
 ROOT_URLCONF = 'blood_exams.urls'
@@ -135,6 +149,27 @@ OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o')
 SESSION_COOKIE_AGE = 86400  # 24 hours
 SESSION_SAVE_EVERY_REQUEST = True
 
+# Allauth
+ACCOUNT_LOGIN_ON_GET = True
+ACCOUNT_LOGIN_METHODS = {'email', 'username'}
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
+ACCOUNT_SIGNUP_REDIRECT_URL = f'{FORCE_SCRIPT_NAME}/complete-profile/' if FORCE_SCRIPT_NAME else '/complete-profile/'
+SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+
+# Google OAuth
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID', ''),
+            'secret': os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+    }
+}
+
 # Security
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -142,10 +177,19 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'False').lower() in ('true', '1', 'yes')
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    _use_ssl = os.environ.get('SECURE_SSL_REDIRECT', 'False').lower() in ('true', '1', 'yes')
+    SECURE_SSL_REDIRECT = _use_ssl
+    SESSION_COOKIE_SECURE = _use_ssl
+    CSRF_COOKIE_SECURE = _use_ssl
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Cloudflare Flexible SSL: browser uses HTTPS but origin receives HTTP
+# Django 4.0+ requires explicit CSRF_TRUSTED_ORIGINS for cross-scheme requests
+CSRF_TRUSTED_ORIGINS = [
+    'https://mlt.com.br',
+    'https://www.mlt.com.br',
+    'http://45.63.90.69',
+]
 
 # Logging
 LOGGING = {

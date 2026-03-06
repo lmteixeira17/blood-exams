@@ -21,6 +21,13 @@
         </div>
         {% endif %}
 
+        <h2 class="section-title">Dados Pessoais</h2>
+
+        <div class="form-group">
+            <label>Usu&aacute;rio</label>
+            <input type="text" value="{{ user.username }}" disabled class="input-disabled">
+        </div>
+
         <div class="form-row">
             <div class="form-group">
                 <label for="id_first_name">Nome</label>
@@ -43,8 +50,7 @@
         <div class="form-row">
             <div class="form-group">
                 <label for="id_date_of_birth">Data de Nascimento</label>
-                <input type="date" name="date_of_birth" id="id_date_of_birth"
-                       value="{{ form.date_of_birth.value|default:'' }}">
+                {{ form.date_of_birth }}
             </div>
             <div class="form-group">
                 <label for="id_gender">Sexo</label>
@@ -56,7 +62,29 @@
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <h2 class="section-title" style="margin-top: 32px;">Alterar Senha</h2>
+        <p class="form-hint">Preencha apenas se desejar alterar sua senha.</p>
+
+        <div class="form-group">
+            <label for="id_current_password">Senha Atual</label>
+            <input type="password" name="current_password" id="id_current_password"
+                   autocomplete="current-password">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_new_password">Nova Senha</label>
+                <input type="password" name="new_password" id="id_new_password"
+                       autocomplete="new-password" minlength="8">
+            </div>
+            <div class="form-group">
+                <label for="id_confirm_password">Confirmar Nova Senha</label>
+                <input type="password" name="confirm_password" id="id_confirm_password"
+                       autocomplete="new-password">
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 24px;">Salvar Altera&ccedil;&otilde;es</button>
     </form>
 </div>
 {% endblock %}

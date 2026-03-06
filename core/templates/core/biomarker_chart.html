@@ -11,6 +11,10 @@
             {{ biomarker.category }} &bull; {{ biomarker.unit }}
             {% if ref_min and ref_max %}
             &bull; Refer&ecirc;ncia: {{ ref_min }} - {{ ref_max }}
+            {% elif ref_min %}
+            &bull; Refer&ecirc;ncia: &gt; {{ ref_min }}
+            {% elif ref_max %}
+            &bull; Refer&ecirc;ncia: &lt; {{ ref_max }}
             {% endif %}
         </p>
     </div>
@@ -60,7 +64,7 @@
 <div class="section">
     <h2 class="section-title">Hist&oacute;rico de Valores</h2>
     <div class="results-table-wrapper">
-        <table class="results-table">
+        <table class="results-table results-table-mobile">
             <thead>
                 <tr>
                     <th>Data</th>
@@ -72,16 +76,20 @@
             <tbody>
                 {% for r in results reversed %}
                 <tr class="{% if r.is_abnormal %}row-abnormal{% endif %}">
-                    <td>{{ r.exam.exam_date|date:"d/m/Y" }}</td>
-                    <td><strong>{{ r.value }} {{ biomarker.unit }}</strong></td>
-                    <td>
+                    <td data-label="Data">{{ r.exam.exam_date|date:"d/m/Y" }}</td>
+                    <td data-label="Valor"><strong>{{ r.value }} {{ biomarker.unit }}</strong></td>
+                    <td data-label="Refer&ecirc;ncia">
                         {% if r.ref_min is not None and r.ref_max is not None %}
                             {{ r.ref_min }} - {{ r.ref_max }}
+                        {% elif r.ref_min is not None %}
+                            &gt; {{ r.ref_min }}
+                        {% elif r.ref_max is not None %}
+                            &lt; {{ r.ref_max }}
                         {% else %}
                             -
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Status">
                         {% if r.is_abnormal %}
                             <span class="badge badge-warning">Alterado</span>
                         {% else %}

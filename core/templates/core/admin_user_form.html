@@ -1,0 +1,105 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ page_title }} - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="{% url 'admin_users' %}" class="back-link">&larr; Voltar</a>
+        <h1>{{ page_title }}</h1>
+    </div>
+</div>
+
+<div class="section" style="max-width: 600px;">
+    <form method="post" class="profile-form">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="alert alert-error">
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <h2 class="section-title">Conta</h2>
+
+        <div class="form-group">
+            <label for="id_username">Usu&aacute;rio *</label>
+            <input type="text" name="username" id="id_username"
+                   value="{{ form.username.value|default:'' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="id_password">
+                {% if editing_user %}Nova Senha{% else %}Senha *{% endif %}
+            </label>
+            <input type="password" name="password" id="id_password"
+                   minlength="8" {% if not editing_user %}required{% endif %}>
+            {% if editing_user %}
+            <span class="form-hint">Deixe em branco para manter a senha atual.</span>
+            {% endif %}
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="is_superuser" {% if form.is_superuser.value %}checked{% endif %}>
+                    Administrador
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="is_active" {% if form.is_active.value %}checked{% endif %}>
+                    Ativo
+                </label>
+            </div>
+        </div>
+
+        <h2 class="section-title" style="margin-top: 24px;">Dados Pessoais</h2>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_first_name">Nome</label>
+                <input type="text" name="first_name" id="id_first_name"
+                       value="{{ form.first_name.value|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label for="id_last_name">Sobrenome</label>
+                <input type="text" name="last_name" id="id_last_name"
+                       value="{{ form.last_name.value|default:'' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="id_email">E-mail</label>
+            <input type="email" name="email" id="id_email"
+                   value="{{ form.email.value|default:'' }}">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_date_of_birth">Data de Nascimento</label>
+                {{ form.date_of_birth }}
+            </div>
+            <div class="form-group">
+                <label for="id_gender">Sexo</label>
+                <select name="gender" id="id_gender">
+                    <option value="">Selecione...</option>
+                    <option value="M" {% if form.gender.value == 'M' %}selected{% endif %}>Masculino</option>
+                    <option value="F" {% if form.gender.value == 'F' %}selected{% endif %}>Feminino</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top: 24px; display: flex; gap: 12px;">
+            <button type="submit" class="btn btn-primary">
+                {% if editing_user %}Salvar Altera&ccedil;&otilde;es{% else %}Criar Usu&aacute;rio{% endif %}
+            </button>
+            <a href="{% url 'admin_users' %}" class="btn btn-outline">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

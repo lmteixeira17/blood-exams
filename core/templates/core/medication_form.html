@@ -1,0 +1,85 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ page_title }} - Blood Lab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="{% url 'medications' %}" class="back-link">&larr; Voltar</a>
+        <h1>{{ page_title }}</h1>
+    </div>
+</div>
+
+<div class="form-container">
+    <form method="post" class="med-form">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="alert alert-error">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+            {% for field in form %}
+                {% for error in field.errors %}
+                <p>{{ field.label }}: {{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <label for="id_medication">Medicamento *</label>
+            {{ form.medication }}
+        </div>
+
+        <div class="form-divider">
+            <span>ou cadastre um novo</span>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_medication_name">Nome do Novo Medicamento</label>
+                {{ form.medication_name }}
+            </div>
+            <div class="form-group">
+                <label for="id_medication_type">Tipo</label>
+                {{ form.medication_type }}
+            </div>
+        </div>
+
+        <hr class="form-separator">
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_dose">Dose *</label>
+                {{ form.dose }}
+            </div>
+            <div class="form-group">
+                <label for="id_frequency">Frequ&ecirc;ncia *</label>
+                {{ form.frequency }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="id_start_date">Data de In&iacute;cio *</label>
+                {{ form.start_date }}
+            </div>
+            <div class="form-group">
+                <label for="id_end_date">Data de T&eacute;rmino (opcional)</label>
+                {{ form.end_date }}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="id_notes">Observa&ccedil;&otilde;es (opcional)</label>
+            {{ form.notes }}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">Salvar</button>
+            <a href="{% url 'medications' %}" class="btn btn-outline btn-lg">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

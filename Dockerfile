@@ -57,6 +57,7 @@ COPY --from=builder /app/blood_exams /app/blood_exams
 COPY --from=builder /app/staticfiles /app/staticfiles
 COPY --from=builder /app/static /app/static
 COPY --from=builder /app/manage.py /app/manage.py
+COPY --from=builder /app/entrypoint.sh /app/entrypoint.sh
 
 # Create media directory
 RUN mkdir -p /app/media/exams /app/logs
@@ -71,5 +72,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health/ || exit 1
 
-# Gunicorn: 2 workers (RAM constrained server), 300s timeout for AI processing
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "300", "--max-requests", "500", "--max-requests-jitter", "50", "blood_exams.wsgi:application"]
+# Entrypoint: migrate + configure site + start gunicorn
+CMD ["sh", "/app/entrypoint.sh"]
